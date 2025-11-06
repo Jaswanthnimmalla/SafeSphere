@@ -10,10 +10,10 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.graphics.*
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
@@ -33,8 +33,14 @@ fun GlassCard(
             .clip(RoundedCornerShape(16.dp))
             .background(SafeSphereColors.Surface.copy(alpha = 0.6f))
             .border(
-                width = 1.dp,
-                color = SafeSphereColors.TextSecondary.copy(alpha = 0.1f),
+                width = 1.5.dp,
+                brush = androidx.compose.ui.graphics.Brush.linearGradient(
+                    colors = listOf(
+                        SafeSphereColors.Primary.copy(alpha = 0.3f),
+                        SafeSphereColors.Secondary.copy(alpha = 0.3f),
+                        SafeSphereColors.Accent.copy(alpha = 0.3f)
+                    )
+                ),
                 shape = RoundedCornerShape(16.dp)
             )
     ) {
@@ -388,17 +394,83 @@ fun ViewVaultItemDialog(
     onDismiss: () -> Unit
 ) {
     var decryptedContent by remember { mutableStateOf<String?>(null) }
-    var isLoading by remember { mutableStateOf(true) }
+    var isLoading by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
+    var isAuthenticating by remember { mutableStateOf(true) }
+    var authenticationFailed by remember { mutableStateOf(false) }
 
+    // Get activity context (now it's FragmentActivity)
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val activity = context as? androidx.fragment.app.FragmentActivity
+
+    // Biometric authentication before decrypting
     LaunchedEffect(item.id) {
-        viewModel.getDecryptedItem(item.id) { result ->
-            isLoading = false
-            result.onSuccess { decrypted ->
-                decryptedContent = decrypted.content
-            }.onFailure { e ->
-                error = e.message
+        if (activity != null) {
+            try {
+                // Initialize biometric manager
+                val biometricManager = com.runanywhere.startup_hackathon20.security.BiometricAuthManager(context)
+                
+                // Check if biometric is available
+                val availability = biometricManager.isBiometricAvailable()
+                
+                if (availability.isAvailable()) {
+                    // Show biometric prompt
+                    val result = biometricManager.authenticate(
+                        activity = activity,
+                        title = "Unlock Password",
+                        subtitle = "Authenticate to view ${item.title}",
+                        description = "Use your fingerprint or device credential",
+                        allowDeviceCredential = true
+                    )
+                    
+                    isAuthenticating = false
+                    
+                    when (result) {
+                        is com.runanywhere.startup_hackathon20.security.AuthenticationResult.Success -> {
+                            // Authentication successful - decrypt content
+                            isLoading = true
+                            viewModel.getDecryptedItem(item.id) { decryptResult ->
+                                isLoading = false
+                                decryptResult.onSuccess { decrypted ->
+                                    decryptedContent = decrypted.content
+                                }.onFailure { e ->
+                                    error = e.message
+                                }
+                            }
+                        }
+                        is com.runanywhere.startup_hackathon20.security.AuthenticationResult.Error -> {
+                            // Authentication failed or canceled
+                            if (result.isRecoverable) {
+                                // User canceled - close dialog
+                                onDismiss()
+                            } else {
+                                authenticationFailed = true
+                                error = "Authentication failed"
+                            }
+                        }
+                    }
+                } else {
+                    // Biometric not available - show message and decrypt directly
+                    isAuthenticating = false
+                    isLoading = true
+                    viewModel.getDecryptedItem(item.id) { decryptResult ->
+                        isLoading = false
+                        decryptResult.onSuccess { decrypted ->
+                            decryptedContent = decrypted.content
+                        }.onFailure { e ->
+                            error = e.message
+                        }
+                    }
+                }
+            } catch (e: Exception) {
+                isAuthenticating = false
+                authenticationFailed = true
+                error = "Error: ${e.message}"
             }
+        } else {
+            // Not a FragmentActivity - this shouldn't happen now
+            isAuthenticating = false
+            error = "Biometric authentication not supported in this context"
         }
     }
 
@@ -454,6 +526,37 @@ fun ViewVaultItemDialog(
 
                 // Content
                 when {
+                    isAuthenticating -> {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(140.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Column(
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                verticalArrangement = Arrangement.spacedBy(12.dp)
+                            ) {
+                                Text(
+                                    text = "🔐",
+                                    fontSize = 56.sp
+                                )
+                                Text(
+                                    text = "Authentication Required",
+                                    fontSize = 16.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = SafeSphereColors.TextPrimary
+                                )
+                                Text(
+                                    text = "Please unlock with fingerprint or PIN",
+                                    fontSize = 13.sp,
+                                    color = SafeSphereColors.TextSecondary,
+                                    textAlign = TextAlign.Center
+                                )
+                            }
+                        }
+                    }
+                    
                     isLoading -> {
                         Box(
                             modifier = Modifier
@@ -461,18 +564,41 @@ fun ViewVaultItemDialog(
                                 .height(120.dp),
                             contentAlignment = Alignment.Center
                         ) {
-                            CircularProgressIndicator(
-                                color = SafeSphereColors.Primary
-                            )
+                            Column(
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                verticalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                CircularProgressIndicator(
+                                    color = SafeSphereColors.Primary
+                                )
+                                Text(
+                                    text = "Decrypting...",
+                                    fontSize = 14.sp,
+                                    color = SafeSphereColors.TextSecondary
+                                )
+                            }
                         }
                     }
 
-                    error != null -> {
-                        Text(
-                            text = "❌ Decryption failed: $error",
-                            fontSize = 14.sp,
-                            color = SafeSphereColors.Error
-                        )
+                    authenticationFailed || error != null -> {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 16.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            Text(
+                                text = "❌",
+                                fontSize = 48.sp
+                            )
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Text(
+                                text = error ?: "Authentication failed",
+                                fontSize = 14.sp,
+                                color = SafeSphereColors.Error,
+                                textAlign = TextAlign.Center
+                            )
+                        }
                     }
 
                     else -> {
@@ -508,21 +634,25 @@ fun ViewVaultItemDialog(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
-                    GlassButton(
-                        text = "Delete",
-                        onClick = {
-                            viewModel.deleteVaultItem(item.id)
-                            onDismiss()
-                        },
-                        modifier = Modifier.weight(1f)
-                    )
+                    if (!isAuthenticating && !isLoading) {
+                        if (decryptedContent != null) {
+                            GlassButton(
+                                text = "Delete",
+                                onClick = {
+                                    viewModel.deleteVaultItem(item.id)
+                                    onDismiss()
+                                },
+                                modifier = Modifier.weight(1f)
+                            )
+                        }
 
-                    GlassButton(
-                        text = "Close",
-                        onClick = onDismiss,
-                        primary = true,
-                        modifier = Modifier.weight(1f)
-                    )
+                        GlassButton(
+                            text = "Close",
+                            onClick = onDismiss,
+                            primary = true,
+                            modifier = Modifier.weight(1f)
+                        )
+                    }
                 }
             }
         }

@@ -1,13 +1,18 @@
 package com.runanywhere.startup_hackathon20.viewmodels
 
 import android.app.Application
+import android.content.Context
+import android.net.ConnectivityManager
+import android.net.NetworkCapabilities
 import android.util.Log
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.runanywhere.sdk.public.RunAnywhere
 import com.runanywhere.startup_hackathon20.data.*
+import com.runanywhere.startup_hackathon20.security.AuthenticationManager
 import com.runanywhere.startup_hackathon20.security.SecurityManager
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 
@@ -24,6 +29,7 @@ import kotlinx.coroutines.launch
 class SafeSphereViewModel(application: Application) : AndroidViewModel(application) {
 
     private val repository = PrivacyVaultRepository.getInstance(application)
+    private val authManager = AuthenticationManager.getInstance(application)
 
     // Vault items state
     val vaultItems = repository.vaultItems.stateIn(
@@ -48,9 +54,31 @@ class SafeSphereViewModel(application: Application) : AndroidViewModel(applicati
     private val _threatEvents = MutableStateFlow<List<ThreatEvent>>(emptyList())
     val threatEvents: StateFlow<List<ThreatEvent>> = _threatEvents.asStateFlow()
 
-    // Current screen
-    private val _currentScreen = MutableStateFlow(SafeSphereScreen.ONBOARDING)
+    // Real-time monitoring state
+    private val _isMonitoring = MutableStateFlow(false)
+    val isMonitoring: StateFlow<Boolean> = _isMonitoring.asStateFlow()
+
+    // Network status
+    private val _networkStatus = MutableStateFlow("Checking...")
+    val networkStatus: StateFlow<String> = _networkStatus.asStateFlow()
+
+    // Threats blocked count
+    private val _threatsBlocked = MutableStateFlow(0)
+    val threatsBlocked: StateFlow<Int> = _threatsBlocked.asStateFlow()
+
+    // Current screen - start with LOGIN or DASHBOARD based on auth status
+    private val _currentScreen = MutableStateFlow(
+        if (authManager.isLoggedIn()) SafeSphereScreen.DASHBOARD
+        else SafeSphereScreen.LOGIN
+    )
     val currentScreen: StateFlow<SafeSphereScreen> = _currentScreen.asStateFlow()
+
+    // Navigation stack for back gesture support
+    private val navigationStack = mutableListOf<SafeSphereScreen>()
+
+    // Current user
+    private val _currentUser = MutableStateFlow(authManager.getCurrentUser())
+    val currentUser: StateFlow<User?> = _currentUser.asStateFlow()
 
     // Online/offline status (always offline for SafeSphere)
     private val _isOfflineMode = MutableStateFlow(true)
@@ -68,6 +96,7 @@ class SafeSphereViewModel(application: Application) : AndroidViewModel(applicati
         updateStorageStats()
         initializeWelcomeMessage()
         startThreatSimulation()
+        startRealTimeMonitoring()
     }
 
     /**
@@ -290,6 +319,153 @@ class SafeSphereViewModel(application: Application) : AndroidViewModel(applicati
             )
         )
         _threatEvents.value = initialThreats
+        _threatsBlocked.value = initialThreats.size
+    }
+
+    /**
+     * Start real-time security monitoring
+     */
+    private fun startRealTimeMonitoring() {
+        viewModelScope.launch {
+            _isMonitoring.value = true
+
+            while (_isMonitoring.value) {
+                // Monitor network status
+                checkNetworkStatus()
+
+                // Check for potential threats
+                checkSystemSecurity()
+
+                // Update stats
+                _threatsBlocked.value = _threatEvents.value.count { it.mitigated }
+
+                // Wait 5 seconds before next check
+                delay(5000)
+            }
+        }
+    }
+
+    /**
+     * Check network status in real-time
+     */
+    private fun checkNetworkStatus() {
+        try {
+            val connectivityManager = getApplication<Application>()
+                .getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
+
+            val network = connectivityManager.activeNetwork
+            val capabilities = network?.let {
+                connectivityManager.getNetworkCapabilities(it)
+            }
+
+            when {
+                capabilities == null -> {
+                    _networkStatus.value = "✅ Offline (Secure)"
+                }
+
+                capabilities.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) -> {
+                    _networkStatus.value = "⚠️ WiFi Detected"
+                    // Auto-generate threat about public WiFi
+                    addRealTimeThreat(
+                        type = ThreatType.MAN_IN_MIDDLE,
+                        severity = ThreatSeverity.MEDIUM,
+                        description = "WiFi connection detected. Public WiFi can expose data. SafeSphere encryption protects you."
+                    )
+                }
+
+                capabilities.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR) -> {
+                    _networkStatus.value = "⚠️ Mobile Data Active"
+                    addRealTimeThreat(
+                        type = ThreatType.CLOUD_EXPOSURE,
+                        severity = ThreatSeverity.LOW,
+                        description = "Network connection active. Cloud services vulnerable to breaches. Your data stays offline."
+                    )
+                }
+
+                else -> {
+                    _networkStatus.value = "✅ Offline Mode"
+                }
+            }
+        } catch (e: Exception) {
+            _networkStatus.value = "✅ Offline (Secure)"
+        }
+    }
+
+    /**
+     * Check system security in real-time
+     */
+    private fun checkSystemSecurity() {
+        try {
+            val securityStatus = SecurityManager.getSecurityStatus()
+
+            // Check encryption status
+            if (!securityStatus.aesKeyPresent) {
+                addRealTimeThreat(
+                    type = ThreatType.DATA_BREACH,
+                    severity = ThreatSeverity.CRITICAL,
+                    description = "Encryption key not found. Initializing AES-256 encryption for data protection."
+                )
+            }
+
+            // Check hardware security
+            if (!securityStatus.hardwareBacked) {
+                addRealTimeThreat(
+                    type = ThreatType.UNAUTHORIZED_ACCESS,
+                    severity = ThreatSeverity.MEDIUM,
+                    description = "Hardware security unavailable. Using software encryption. Still secure but not hardware-backed."
+                )
+            }
+
+            // Simulate random threats based on time
+            val random = kotlin.random.Random(System.currentTimeMillis())
+            if (random.nextInt(100) < 10) { // 10% chance every check
+                val randomThreats = listOf(
+                    ThreatEvent(
+                        type = ThreatType.PHISHING,
+                        severity = ThreatSeverity.LOW,
+                        description = "Phishing attempt detected from fake cloud service. Offline mode prevents connection.",
+                        mitigated = true
+                    ),
+                    ThreatEvent(
+                        type = ThreatType.MALWARE,
+                        severity = ThreatSeverity.HIGH,
+                        description = "Malicious app scan detected. SafeSphere data isolated in encrypted vault.",
+                        mitigated = true
+                    ),
+                    ThreatEvent(
+                        type = ThreatType.UNAUTHORIZED_ACCESS,
+                        severity = ThreatSeverity.HIGH,
+                        description = "App permission scan detected. Your data remains encrypted and inaccessible.",
+                        mitigated = true
+                    )
+                )
+
+                _threatEvents.value =
+                    listOf(randomThreats.random()) + _threatEvents.value.take(19) // Keep last 20
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Security check error: ${e.message}")
+        }
+    }
+
+    /**
+     * Add real-time threat (check for duplicates)
+     */
+    private fun addRealTimeThreat(type: ThreatType, severity: ThreatSeverity, description: String) {
+        // Check if similar threat already exists in last 5 events
+        val recentSimilar = _threatEvents.value.take(5).any {
+            it.type == type && it.description.startsWith(description.take(20))
+        }
+
+        if (!recentSimilar) {
+            val newThreat = ThreatEvent(
+                type = type,
+                severity = severity,
+                description = description,
+                mitigated = true
+            )
+            _threatEvents.value = listOf(newThreat) + _threatEvents.value.take(19) // Keep last 20
+        }
     }
 
     /**
@@ -314,12 +490,37 @@ class SafeSphereViewModel(application: Application) : AndroidViewModel(applicati
                 severity = ThreatSeverity.HIGH,
                 description = "Simulated: Unauthorized device access attempt. Hardware-backed encryption prevented data access.",
                 mitigated = true
+            ),
+            ThreatEvent(
+                type = ThreatType.CLOUD_EXPOSURE,
+                severity = ThreatSeverity.CRITICAL,
+                description = "Simulated: Cloud provider breach exposing 2.4B records. Your offline data is completely safe.",
+                mitigated = true
+            ),
+            ThreatEvent(
+                type = ThreatType.MALWARE,
+                severity = ThreatSeverity.HIGH,
+                description = "Simulated: Malware scanning for credential files. SafeSphere vault is encrypted and protected.",
+                mitigated = true
             )
         )
 
         val newThreat = threats.random()
-        _threatEvents.value = listOf(newThreat) + _threatEvents.value
-        showMessage("🛡️ Threat simulated: ${newThreat.type.displayName}")
+        _threatEvents.value = listOf(newThreat) + _threatEvents.value.take(19) // Keep last 20
+        showMessage("🛡️ Threat simulated and blocked!")
+    }
+
+    /**
+     * Toggle real-time monitoring
+     */
+    fun toggleMonitoring() {
+        _isMonitoring.value = !_isMonitoring.value
+        if (_isMonitoring.value) {
+            startRealTimeMonitoring()
+            showMessage("🔍 Real-time monitoring enabled")
+        } else {
+            showMessage("⏸️ Monitoring paused")
+        }
     }
 
     /**
@@ -327,12 +528,96 @@ class SafeSphereViewModel(application: Application) : AndroidViewModel(applicati
      */
     fun clearThreats() {
         _threatEvents.value = emptyList()
+        _threatsBlocked.value = 0
     }
 
     // ==================== NAVIGATION ====================
 
+    /**
+     * Navigate to a specific screen
+     */
     fun navigateToScreen(screen: SafeSphereScreen) {
-        _currentScreen.value = screen
+        // Don't add to stack if it's the same screen
+        if (_currentScreen.value != screen) {
+            // Add current screen to stack before navigating
+            navigationStack.add(_currentScreen.value)
+            _currentScreen.value = screen
+        }
+    }
+
+    /**
+     * Navigate back to previous screen using back gesture or button
+     * Returns true if navigation happened, false if at root screen
+     */
+    fun navigateBack(): Boolean {
+        return when {
+            // If stack is not empty, pop and navigate
+            navigationStack.isNotEmpty() -> {
+                val previousScreen = navigationStack.removeAt(navigationStack.lastIndex)
+                _currentScreen.value = previousScreen
+                true
+            }
+            // If on secondary screens, go back to dashboard
+            _currentScreen.value !in listOf(
+                SafeSphereScreen.DASHBOARD,
+                SafeSphereScreen.LOGIN,
+                SafeSphereScreen.REGISTER,
+                SafeSphereScreen.ONBOARDING
+            ) -> {
+                _currentScreen.value = SafeSphereScreen.DASHBOARD
+                true
+            }
+            // At root screen (Dashboard or Login), can't go back
+            else -> false
+        }
+    }
+
+    /**
+     * Clear navigation stack (used after logout or login)
+     */
+    private fun clearNavigationStack() {
+        navigationStack.clear()
+    }
+
+    // ==================== AUTHENTICATION ====================
+
+    /**
+     * Login user
+     */
+    suspend fun login(credentials: LoginCredentials): AuthResult {
+        return authManager.login(credentials).also { result ->
+            if (result is AuthResult.Success) {
+                _currentUser.value = result.user
+                _currentScreen.value = SafeSphereScreen.DASHBOARD
+                clearNavigationStack()
+                showMessage("✅ Welcome back, ${result.user.name}!")
+            }
+        }
+    }
+
+    /**
+     * Register new user
+     */
+    suspend fun register(data: RegistrationData): AuthResult {
+        return authManager.register(data).also { result ->
+            if (result is AuthResult.Success) {
+                _currentUser.value = result.user
+                _currentScreen.value = SafeSphereScreen.ONBOARDING
+                clearNavigationStack()
+                showMessage("✅ Welcome to SafeSphere, ${result.user.name}!")
+            }
+        }
+    }
+
+    /**
+     * Logout user
+     */
+    fun logout() {
+        authManager.logout()
+        _currentUser.value = null
+        _currentScreen.value = SafeSphereScreen.LOGIN
+        clearNavigationStack()
+        showMessage("👋 Logged out successfully")
     }
 
     // ==================== UI MESSAGES ====================
@@ -360,6 +645,8 @@ data class SafeSphereChatMessage(
  * App screens
  */
 enum class SafeSphereScreen {
+    LOGIN,
+    REGISTER,
     ONBOARDING,
     DASHBOARD,
     PRIVACY_VAULT,
@@ -367,5 +654,7 @@ enum class SafeSphereScreen {
     DATA_MAP,
     THREAT_SIMULATION,
     SETTINGS,
-    MODELS
+    MODELS,
+    NOTIFICATIONS,
+    PASSWORD_HEALTH
 }

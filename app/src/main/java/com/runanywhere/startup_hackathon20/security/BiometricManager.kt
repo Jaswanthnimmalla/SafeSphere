@@ -45,34 +45,34 @@ class BiometricAuthManager(private val context: Context) {
     fun isBiometricAvailable(): BiometricAvailability {
         return when (biometricManager.canAuthenticate(STRENGTH_STRONG)) {
             BiometricManager.BIOMETRIC_SUCCESS -> {
-                BiometricAvailability.AVAILABLE
+                BiometricAvailability.Available
             }
 
             BiometricManager.BIOMETRIC_ERROR_NO_HARDWARE -> {
-                BiometricAvailability.NO_HARDWARE
+                BiometricAvailability.NoHardware
             }
 
             BiometricManager.BIOMETRIC_ERROR_HW_UNAVAILABLE -> {
-                BiometricAvailability.HARDWARE_UNAVAILABLE
+                BiometricAvailability.HardwareUnavailable
             }
 
             BiometricManager.BIOMETRIC_ERROR_NONE_ENROLLED -> {
-                BiometricAvailability.NONE_ENROLLED
+                BiometricAvailability.NoneEnrolled
             }
 
             BiometricManager.BIOMETRIC_ERROR_SECURITY_UPDATE_REQUIRED -> {
-                BiometricAvailability.SECURITY_UPDATE_REQUIRED
+                BiometricAvailability.SecurityUpdateRequired
             }
 
             BiometricManager.BIOMETRIC_ERROR_UNSUPPORTED -> {
-                BiometricAvailability.UNSUPPORTED
+                BiometricAvailability.Unsupported
             }
 
             BiometricManager.BIOMETRIC_STATUS_UNKNOWN -> {
-                BiometricAvailability.UNKNOWN
+                BiometricAvailability.Unknown
             }
 
-            else -> BiometricAvailability.UNKNOWN
+            else -> BiometricAvailability.Unknown
         }
     }
 
@@ -308,14 +308,26 @@ class BiometricAuthManager(private val context: Context) {
 /**
  * Biometric availability status
  */
-enum class BiometricAvailability {
-    AVAILABLE,              // Biometric authentication is available
-    NO_HARDWARE,           // No biometric hardware
-    HARDWARE_UNAVAILABLE,  // Hardware temporarily unavailable
-    NONE_ENROLLED,         // No biometrics enrolled
-    SECURITY_UPDATE_REQUIRED, // Security update needed
-    UNSUPPORTED,           // Not supported on this device
-    UNKNOWN                // Unknown status
+sealed class BiometricAvailability {
+    object Available : BiometricAvailability()
+    object NoHardware : BiometricAvailability()
+    object HardwareUnavailable : BiometricAvailability()
+    object NoneEnrolled : BiometricAvailability()
+    object SecurityUpdateRequired : BiometricAvailability()
+    object Unsupported : BiometricAvailability()
+    object Unknown : BiometricAvailability()
+
+    fun isAvailable(): Boolean = this is Available
+
+    fun getMessage(): String = when (this) {
+        is Available -> "Biometric authentication available"
+        is NoHardware -> "No biometric hardware found"
+        is HardwareUnavailable -> "Biometric hardware unavailable"
+        is NoneEnrolled -> "No biometric credentials enrolled. Please add fingerprint in Settings."
+        is SecurityUpdateRequired -> "Security update required"
+        is Unsupported -> "Biometric authentication unsupported"
+        is Unknown -> "Biometric status unknown"
+    }
 }
 
 /**
@@ -366,4 +378,67 @@ sealed class AuthenticationResult {
         val errorMessage: String,
         val isRecoverable: Boolean
     ) : AuthenticationResult()
+}
+
+/**
+ * Auto-lock manager - Locks vault after inactivity
+ */
+class AutoLockManager(private val context: Context) {
+
+    private var lastActivityTime = System.currentTimeMillis()
+    private var lockTimeoutMillis = 30_000L // 30 seconds default
+    private var isLocked = false
+
+    /**
+     * Update last activity timestamp
+     */
+    fun updateActivity() {
+        lastActivityTime = System.currentTimeMillis()
+    }
+
+    /**
+     * Check if should auto-lock
+     */
+    fun shouldAutoLock(): Boolean {
+        val now = System.currentTimeMillis()
+        val elapsed = now - lastActivityTime
+        return elapsed > lockTimeoutMillis && !isLocked
+    }
+
+    /**
+     * Lock the vault
+     */
+    fun lock() {
+        isLocked = true
+    }
+
+    /**
+     * Unlock the vault
+     */
+    fun unlock() {
+        isLocked = false
+        lastActivityTime = System.currentTimeMillis()
+    }
+
+    /**
+     * Check if locked
+     */
+    fun isLocked(): Boolean = isLocked
+
+    /**
+     * Set lock timeout
+     */
+    fun setLockTimeout(seconds: Int) {
+        lockTimeoutMillis = seconds * 1000L
+    }
+
+    /**
+     * Get lock timeout options
+     */
+    companion object {
+        const val TIMEOUT_30_SECONDS = 30
+        const val TIMEOUT_1_MINUTE = 60
+        const val TIMEOUT_5_MINUTES = 300
+        const val TIMEOUT_NEVER = -1
+    }
 }

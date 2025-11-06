@@ -7,6 +7,7 @@ import com.runanywhere.sdk.data.models.SDKEnvironment
 import com.runanywhere.sdk.public.extensions.addModelFromURL
 import com.runanywhere.sdk.llm.llamacpp.LlamaCppServiceProvider
 import com.runanywhere.startup_hackathon20.security.SecurityManager
+import com.runanywhere.startup_hackathon20.security.AuthenticationManager
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.GlobalScope
 import kotlinx.coroutines.launch
@@ -37,6 +38,9 @@ class SafeSphereApplication : Application() {
 
         // Initialize security infrastructure first
         SecurityManager.initialize(this)
+
+        // Initialize authentication manager
+        AuthenticationManager.getInstance(this)
 
         // Initialize SDK asynchronously for offline AI capabilities
         GlobalScope.launch(Dispatchers.IO) {

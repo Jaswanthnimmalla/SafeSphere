@@ -8,7 +8,10 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.*
+import androidx.compose.material.icons.filled.Email
+import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -28,10 +31,14 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.runanywhere.startup_hackathon20.data.*
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 /**
- * Login Screen - Beautiful Material Design 3
+ * Login Screen - Beautiful Material Design 3 with Auto-fill support
  */
 @Composable
 fun LoginScreen(
@@ -44,8 +51,79 @@ fun LoginScreen(
     var passwordVisible by remember { mutableStateOf(false) }
     var isLoading by remember { mutableStateOf(false) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
+    var savedCredentials by remember { mutableStateOf<List<PasswordVaultEntry>>(emptyList()) }
+    var showSaveCredentialsDialog by remember { mutableStateOf(false) }
+    var loginCredentials by remember { mutableStateOf<Pair<String, String>?>(null) }
+    var loggedInUser by remember { mutableStateOf<User?>(null) }
 
+    val context = androidx.compose.ui.platform.LocalContext.current
     val focusManager = LocalFocusManager.current
+    val coroutineScope = rememberCoroutineScope()
+
+    // Load saved credentials on mount
+    LaunchedEffect(Unit) {
+        withContext(Dispatchers.IO) {
+            try {
+                val passwordRepo = PasswordVaultRepository.getInstance(context)
+
+                // Get current passwords (no collection, just a single read)
+                val allPasswords = passwordRepo.passwords.value
+                val filtered = allPasswords.filter {
+                it.service.contains("SafeSphere", ignoreCase = true) ||
+                    it.url.contains("startup_hackathon20", ignoreCase = true)
+                }
+
+                withContext(Dispatchers.Main) {
+                    savedCredentials = filtered
+                }
+            } catch (e: Exception) {
+                // No saved credentials
+            }
+        }
+    }
+
+    // Save Credentials Dialog (after successful login)
+    if (showSaveCredentialsDialog && loggedInUser != null && loginCredentials != null) {
+        val savedEmail = loginCredentials!!.first
+        val savedPassword = loginCredentials!!.second
+        val user = loggedInUser!!
+
+        SaveCredentialsDialog(
+            email = savedEmail,
+            password = savedPassword,
+            onSave = {
+                // Save credentials to vault
+                coroutineScope.launch(Dispatchers.IO) {
+                    try {
+                        val passwordRepo = PasswordVaultRepository.getInstance(context)
+
+                        passwordRepo.savePassword(
+                            service = "SafeSphere App",
+                            username = savedEmail,
+                            password = savedPassword,
+                            url = "com.runanywhere.startup_hackathon20",
+                            category = PasswordCategory.OTHER,
+                            notes = "SafeSphere login credentials"
+                        )
+
+                        withContext(Dispatchers.Main) {
+                            showSaveCredentialsDialog = false
+                            onLoginSuccess(user)
+                        }
+                    } catch (e: Exception) {
+                        withContext(Dispatchers.Main) {
+                            showSaveCredentialsDialog = false
+                            onLoginSuccess(user)
+                        }
+                    }
+                }
+            },
+            onDismiss = {
+                showSaveCredentialsDialog = false
+                onLoginSuccess(user)
+            }
+        )
+    }
 
     Box(
         modifier = Modifier
@@ -100,6 +178,34 @@ fun LoginScreen(
 
                     Spacer(modifier = Modifier.height(32.dp))
 
+                    // Show saved credentials dropdown if available
+                    if (savedCredentials.isNotEmpty()) {
+                        SavedCredentialsDropdown(
+                            savedCredentials = savedCredentials,
+                            onCredentialSelected = { savedEntry ->
+                                email = savedEntry.username
+                                // Decrypt and fill password
+                                coroutineScope.launch {
+                                    try {
+                                        val passwordRepo =
+                                            PasswordVaultRepository.getInstance(context)
+                                        val decrypted =
+                                            passwordRepo.getDecryptedPassword(savedEntry.id)
+                                                .getOrNull()
+                                        decrypted?.let {
+                                            password = it.password
+                                            passwordVisible = true
+                                        }
+                                    } catch (e: Exception) {
+                                        // Handle error
+                                    }
+                                }
+                            }
+                        )
+                        
+                        Spacer(modifier = Modifier.height(16.dp))
+                    }
+
                     // Email Field
                     AuthTextField(
                         value = email,
@@ -109,7 +215,7 @@ fun LoginScreen(
                         },
                         label = "Email",
                         placeholder = "Enter your email",
-                        leadingIcon = Icons.Default.Email,
+                        leadingIcon = Icons.Filled.Email,
                         keyboardOptions = KeyboardOptions(
                             keyboardType = KeyboardType.Email,
                             imeAction = ImeAction.Next
@@ -130,8 +236,8 @@ fun LoginScreen(
                         },
                         label = "Password",
                         placeholder = "Enter your password",
-                        leadingIcon = Icons.Default.Lock,
-                        trailingIcon = if (passwordVisible) Icons.Default.Visibility else Icons.Default.VisibilityOff,
+                        leadingIcon = Icons.Filled.Lock,
+                        trailingIcon = if (passwordVisible) "👀" else "🔒",
                         onTrailingIconClick = { passwordVisible = !passwordVisible },
                         visualTransformation = if (passwordVisible) VisualTransformation.None else PasswordVisualTransformation(),
                         keyboardOptions = KeyboardOptions(
@@ -165,7 +271,7 @@ fun LoginScreen(
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
                                 Icon(
-                                    imageVector = Icons.Default.Warning,
+                                    imageVector = Icons.Filled.Warning,
                                     contentDescription = null,
                                     tint = SafeSphereColors.Error,
                                     modifier = Modifier.size(20.dp)
@@ -191,13 +297,26 @@ fun LoginScreen(
                                 errorMessage = null
 
                                 // Perform login
-                                kotlinx.coroutines.GlobalScope.launch {
+                                coroutineScope.launch {
                                     val result = onLogin(LoginCredentials(email, password))
                                     isLoading = false
 
                                     when (result) {
                                         is AuthResult.Success -> {
-                                            onLoginSuccess(result.user)
+                                            // Check if credentials are already saved
+                                            val alreadySaved = savedCredentials.any {
+                                                it.username.equals(email, ignoreCase = true)
+                                            }
+
+                                            if (!alreadySaved) {
+                                                // Show save credentials dialog
+                                                loggedInUser = result.user
+                                                loginCredentials = Pair(email, password)
+                                                showSaveCredentialsDialog = true
+                                            } else {
+                                                // Credentials already saved, just login
+                                                onLoginSuccess(result.user)
+                                            }
                                         }
 
                                         is AuthResult.Error -> {
@@ -226,12 +345,11 @@ fun LoginScreen(
                         ),
                         border = BorderStroke(1.dp, SafeSphereColors.Primary.copy(alpha = 0.3f))
                     ) {
-                        Icon(
-                            imageVector = Icons.Default.Fingerprint,
-                            contentDescription = null,
-                            modifier = Modifier.size(20.dp)
+                        Text(
+                            text = "👍",
+                            fontSize = 20.sp,
+                            modifier = Modifier.padding(end = 8.dp)
                         )
-                        Spacer(modifier = Modifier.width(8.dp))
                         Text("Login with Fingerprint")
                     }
                 }
@@ -263,6 +381,90 @@ fun LoginScreen(
 }
 
 /**
+ * Saved Credentials Dropdown
+ */
+@Composable
+fun SavedCredentialsDropdown(
+    savedCredentials: List<PasswordVaultEntry>,
+    onCredentialSelected: (PasswordVaultEntry) -> Unit
+) {
+    var expanded by remember { mutableStateOf(false) }
+    
+    Column {
+        Text(
+            text = "Saved Credentials",
+            fontSize = 14.sp,
+            fontWeight = FontWeight.Medium,
+            color = SafeSphereColors.TextPrimary,
+            modifier = Modifier.padding(bottom = 8.dp)
+        )
+        
+        Box {
+            OutlinedButton(
+                onClick = { expanded = true },
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(12.dp),
+                colors = ButtonDefaults.outlinedButtonColors(
+                    contentColor = SafeSphereColors.Primary
+                ),
+                border = BorderStroke(1.dp, SafeSphereColors.Primary.copy(alpha = 0.3f))
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(text = "🔐", fontSize = 20.sp)
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("Tap to auto-fill saved credentials")
+                    }
+                    Text(text = "▼", fontSize = 12.sp)
+                }
+            }
+            
+            DropdownMenu(
+                expanded = expanded,
+                onDismissRequest = { expanded = false },
+                modifier = Modifier
+                    .fillMaxWidth(0.9f)
+                    .background(SafeSphereColors.Surface)
+            ) {
+                savedCredentials.forEach { credential ->
+                    DropdownMenuItem(
+                        text = {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(
+                                        text = credential.service,
+                                        fontSize = 16.sp,
+                                        fontWeight = FontWeight.SemiBold,
+                                        color = SafeSphereColors.TextPrimary
+                                    )
+                                    Text(
+                                        text = credential.username,
+                                        fontSize = 14.sp,
+                                        color = SafeSphereColors.TextSecondary
+                                    )
+                                }
+                                Text(
+                                    text = "🔐",
+                                    fontSize = 20.sp
+                                )
+                            }
+                        },
+                        onClick = {
+                            onCredentialSelected(credential)
+                            expanded = false
+                        }
+                    )
+                }
+            }
+        }
+    }
+}
+
+/**
  * Register Screen - Beautiful Material Design 3
  */
 @Composable
@@ -279,8 +481,56 @@ fun RegisterScreen(
     var confirmPasswordVisible by remember { mutableStateOf(false) }
     var isLoading by remember { mutableStateOf(false) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
+    var showSaveCredentialsDialog by remember { mutableStateOf(false) }
+    var registeredUser by remember { mutableStateOf<User?>(null) }
+    var registrationCredentials by remember { mutableStateOf<Pair<String, String>?>(null) }
 
+    val context = androidx.compose.ui.platform.LocalContext.current
     val focusManager = LocalFocusManager.current
+    val coroutineScope = rememberCoroutineScope()
+
+    // Save Credentials Dialog
+    if (showSaveCredentialsDialog && registeredUser != null && registrationCredentials != null) {
+        val savedEmail = registrationCredentials!!.first
+        val savedPassword = registrationCredentials!!.second
+        val user = registeredUser!!
+
+        SaveCredentialsDialog(
+            email = savedEmail,
+            password = savedPassword,
+            onSave = {
+                // Save credentials to vault
+                coroutineScope.launch(Dispatchers.IO) {
+                    try {
+                        val passwordRepo = PasswordVaultRepository.getInstance(context)
+                        
+                        passwordRepo.savePassword(
+                            service = "SafeSphere App",
+                            username = savedEmail,
+                            password = savedPassword,
+                            url = "com.runanywhere.startup_hackathon20",
+                            category = PasswordCategory.OTHER,
+                            notes = "SafeSphere login credentials"
+                        )
+                        
+                        withContext(Dispatchers.Main) {
+                            showSaveCredentialsDialog = false
+                            onRegisterSuccess(user)
+                        }
+                    } catch (e: Exception) {
+                        withContext(Dispatchers.Main) {
+                            showSaveCredentialsDialog = false
+                            onRegisterSuccess(user)
+                        }
+                    }
+                }
+            },
+            onDismiss = {
+                showSaveCredentialsDialog = false
+                onRegisterSuccess(user)
+            }
+        )
+    }
 
     Box(
         modifier = Modifier
@@ -345,7 +595,7 @@ fun RegisterScreen(
                         },
                         label = "Full Name",
                         placeholder = "Enter your name",
-                        leadingIcon = Icons.Default.Person,
+                        leadingIcon = Icons.Filled.Person,
                         keyboardOptions = KeyboardOptions(
                             keyboardType = KeyboardType.Text,
                             imeAction = ImeAction.Next
@@ -366,7 +616,7 @@ fun RegisterScreen(
                         },
                         label = "Email",
                         placeholder = "Enter your email",
-                        leadingIcon = Icons.Default.Email,
+                        leadingIcon = Icons.Filled.Email,
                         keyboardOptions = KeyboardOptions(
                             keyboardType = KeyboardType.Email,
                             imeAction = ImeAction.Next
@@ -387,8 +637,8 @@ fun RegisterScreen(
                         },
                         label = "Password",
                         placeholder = "Create a strong password",
-                        leadingIcon = Icons.Default.Lock,
-                        trailingIcon = if (passwordVisible) Icons.Default.Visibility else Icons.Default.VisibilityOff,
+                        leadingIcon = Icons.Filled.Lock,
+                        trailingIcon = if (passwordVisible) "👀" else "🔒",
                         onTrailingIconClick = { passwordVisible = !passwordVisible },
                         visualTransformation = if (passwordVisible) VisualTransformation.None else PasswordVisualTransformation(),
                         keyboardOptions = KeyboardOptions(
@@ -416,8 +666,8 @@ fun RegisterScreen(
                         },
                         label = "Confirm Password",
                         placeholder = "Re-enter your password",
-                        leadingIcon = Icons.Default.Lock,
-                        trailingIcon = if (confirmPasswordVisible) Icons.Default.Visibility else Icons.Default.VisibilityOff,
+                        leadingIcon = Icons.Filled.Lock,
+                        trailingIcon = if (confirmPasswordVisible) "👀" else "🔒",
                         onTrailingIconClick = { confirmPasswordVisible = !confirmPasswordVisible },
                         visualTransformation = if (confirmPasswordVisible) VisualTransformation.None else PasswordVisualTransformation(),
                         keyboardOptions = KeyboardOptions(
@@ -446,7 +696,7 @@ fun RegisterScreen(
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
                                 Icon(
-                                    imageVector = Icons.Default.Warning,
+                                    imageVector = Icons.Filled.Warning,
                                     contentDescription = null,
                                     tint = SafeSphereColors.Error,
                                     modifier = Modifier.size(20.dp)
@@ -480,7 +730,7 @@ fun RegisterScreen(
                                 errorMessage = null
 
                                 // Perform registration
-                                kotlinx.coroutines.GlobalScope.launch {
+                                coroutineScope.launch {
                                     val result = onRegister(
                                         RegistrationData(
                                             name = name,
@@ -493,7 +743,10 @@ fun RegisterScreen(
 
                                     when (result) {
                                         is AuthResult.Success -> {
-                                            onRegisterSuccess(result.user)
+                                            // Show save credentials dialog
+                                            registeredUser = result.user
+                                            registrationCredentials = Pair(email, password)
+                                            showSaveCredentialsDialog = true
                                         }
 
                                         is AuthResult.Error -> {
@@ -537,6 +790,110 @@ fun RegisterScreen(
             Spacer(modifier = Modifier.height(40.dp))
         }
     }
+}
+
+/**
+ * Save Credentials Dialog - Shown after registration
+ */
+@Composable
+fun SaveCredentialsDialog(
+    email: String,
+    password: String,
+    onSave: () -> Unit,
+    onDismiss: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        containerColor = SafeSphereColors.Surface,
+        shape = RoundedCornerShape(20.dp),
+        title = {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    text = "🔐",
+                    fontSize = 28.sp,
+                    modifier = Modifier.padding(end = 12.dp)
+                )
+                Text(
+                    text = "Save to SafeSphere?",
+                    fontSize = 20.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = SafeSphereColors.TextPrimary
+                )
+            }
+        },
+        text = {
+            Column {
+                Text(
+                    text = "Would you like to save your login credentials in SafeSphere Vault?",
+                    fontSize = 16.sp,
+                    color = SafeSphereColors.TextPrimary,
+                    lineHeight = 24.sp
+                )
+                
+                Spacer(modifier = Modifier.height(16.dp))
+                
+                // Show credentials (masked)
+                GlassCard(modifier = Modifier.fillMaxWidth()) {
+                    Column(modifier = Modifier.padding(16.dp)) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(
+                                imageVector = Icons.Filled.Email,
+                                contentDescription = null,
+                                tint = SafeSphereColors.Primary,
+                                modifier = Modifier.size(20.dp)
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = email,
+                                fontSize = 14.sp,
+                                color = SafeSphereColors.TextPrimary
+                            )
+                        }
+                        
+                        Spacer(modifier = Modifier.height(8.dp))
+                        
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(
+                                imageVector = Icons.Filled.Lock,
+                                contentDescription = null,
+                                tint = SafeSphereColors.Primary,
+                                modifier = Modifier.size(20.dp)
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = "••••••••",
+                                fontSize = 14.sp,
+                                color = SafeSphereColors.TextPrimary
+                            )
+                        }
+                    }
+                }
+                
+                Spacer(modifier = Modifier.height(12.dp))
+                
+                Text(
+                    text = "✅ Encrypted with AES-256\n✅ Stored locally on device\n✅ Auto-fill on next login",
+                    fontSize = 13.sp,
+                    color = SafeSphereColors.Success,
+                    lineHeight = 20.sp
+                )
+            }
+        },
+        confirmButton = {
+            GlassButton(
+                text = "💾 Save",
+                onClick = onSave,
+                primary = true
+            )
+        },
+        dismissButton = {
+            GlassButton(
+                text = "Not Now",
+                onClick = onDismiss,
+                primary = false
+            )
+        }
+    )
 }
 
 /**
@@ -654,7 +1011,7 @@ fun AuthTextField(
     placeholder: String,
     leadingIcon: androidx.compose.ui.graphics.vector.ImageVector,
     modifier: Modifier = Modifier,
-    trailingIcon: androidx.compose.ui.graphics.vector.ImageVector? = null,
+    trailingIcon: String? = null,
     onTrailingIconClick: (() -> Unit)? = null,
     visualTransformation: VisualTransformation = VisualTransformation.None,
     keyboardOptions: KeyboardOptions = KeyboardOptions.Default,
@@ -689,11 +1046,7 @@ fun AuthTextField(
             trailingIcon = trailingIcon?.let {
                 {
                     IconButton(onClick = { onTrailingIconClick?.invoke() }) {
-                        Icon(
-                            imageVector = it,
-                            contentDescription = null,
-                            tint = SafeSphereColors.TextSecondary
-                        )
+                        Text(text = it, fontSize = 20.sp)
                     }
                 }
             },

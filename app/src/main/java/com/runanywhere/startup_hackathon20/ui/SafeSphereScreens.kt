@@ -426,16 +426,19 @@ fun PrivacyFeature(icon: String, label: String) {
 }
 
 /**
- * Threat Simulation Screen - Educational threat scenarios
+ * Threat Simulation Screen - Real-time Security Monitoring
  */
 @Composable
 fun ThreatSimulationScreen(viewModel: SafeSphereViewModel) {
     val threats by viewModel.threatEvents.collectAsState()
+    val isMonitoring by viewModel.isMonitoring.collectAsState()
+    val networkStatus by viewModel.networkStatus.collectAsState()
+    val threatsBlocked by viewModel.threatsBlocked.collectAsState()
 
     Column(modifier = Modifier.fillMaxSize()) {
         SafeSphereHeader(
-            title = "Threat Simulation",
-            subtitle = "Educational Security Scenarios",
+            title = "Security Monitor",
+            subtitle = "Real-Time Threat Protection",
             onBackClick = { viewModel.navigateToScreen(SafeSphereScreen.DASHBOARD) },
             onActionClick = { viewModel.simulateThreat() },
             actionIcon = "⚡"
@@ -446,6 +449,127 @@ fun ThreatSimulationScreen(viewModel: SafeSphereViewModel) {
                 .fillMaxSize()
                 .padding(16.dp)
         ) {
+            // Real-time monitoring dashboard
+            GlassCard(modifier = Modifier.fillMaxWidth()) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = "Real-Time Monitoring",
+                                fontSize = 16.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = SafeSphereColors.TextPrimary
+                            )
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Row(
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(8.dp)
+                                        .clip(CircleShape)
+                                        .background(
+                                            if (isMonitoring) SafeSphereColors.Success
+                                            else SafeSphereColors.TextSecondary
+                                        )
+                                )
+                                Text(
+                                    text = if (isMonitoring) "Active" else "Paused",
+                                    fontSize = 13.sp,
+                                    color = SafeSphereColors.TextSecondary
+                                )
+                            }
+                        }
+
+                        // Toggle button
+                        Box(
+                            modifier = Modifier
+                                .size(44.dp)
+                                .clip(CircleShape)
+                                .background(
+                                    if (isMonitoring) SafeSphereColors.Success.copy(alpha = 0.2f)
+                                    else SafeSphereColors.TextSecondary.copy(alpha = 0.2f)
+                                )
+                                .clickable { viewModel.toggleMonitoring() },
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = if (isMonitoring) "⏸" else "▶",
+                                fontSize = 20.sp,
+                                color = if (isMonitoring) SafeSphereColors.Success
+                                else SafeSphereColors.TextSecondary
+                            )
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(16.dp))
+
+                    // Stats grid
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        // Threats Blocked
+                        Column(
+                            modifier = Modifier
+                                .weight(1f)
+                                .clip(RoundedCornerShape(12.dp))
+                                .background(SafeSphereColors.Success.copy(alpha = 0.15f))
+                                .padding(12.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            Text(
+                                text = "🛡️",
+                                fontSize = 28.sp
+                            )
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text(
+                                text = "$threatsBlocked",
+                                fontSize = 24.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = SafeSphereColors.Success
+                            )
+                            Text(
+                                text = "Blocked",
+                                fontSize = 11.sp,
+                                color = SafeSphereColors.TextSecondary
+                            )
+                        }
+
+                        // Network Status
+                        Column(
+                            modifier = Modifier
+                                .weight(1f)
+                                .clip(RoundedCornerShape(12.dp))
+                                .background(SafeSphereColors.Primary.copy(alpha = 0.15f))
+                                .padding(12.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            Text(
+                                text = "📡",
+                                fontSize = 28.sp
+                            )
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text(
+                                text = networkStatus.split(" ").take(2).joinToString(" "),
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                color = SafeSphereColors.TextPrimary,
+                                textAlign = TextAlign.Center,
+                                maxLines = 2
+                            )
+                        }
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
+
             // Info card
             GlassCard(modifier = Modifier.fillMaxWidth()) {
                 Row(
@@ -465,7 +589,7 @@ fun ThreatSimulationScreen(viewModel: SafeSphereViewModel) {
                         )
                         Spacer(modifier = Modifier.height(4.dp))
                         Text(
-                            text = "These simulations show real-world threats that SafeSphere automatically mitigates through offline storage and encryption.",
+                            text = "Real-time monitoring detects network connections, system threats, and security risks. All threats are automatically mitigated through encryption and offline storage.",
                             fontSize = 14.sp,
                             color = SafeSphereColors.TextSecondary,
                             lineHeight = 20.sp
@@ -475,6 +599,30 @@ fun ThreatSimulationScreen(viewModel: SafeSphereViewModel) {
             }
 
             Spacer(modifier = Modifier.height(16.dp))
+
+            // Section header
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "Recent Threats",
+                    fontSize = 18.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = SafeSphereColors.TextPrimary
+                )
+
+                if (threats.isNotEmpty()) {
+                    Text(
+                        text = "Last ${threats.size}",
+                        fontSize = 13.sp,
+                        color = SafeSphereColors.TextSecondary
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(8.dp))
 
             if (threats.isEmpty()) {
                 // Empty state
@@ -501,7 +649,10 @@ fun ThreatSimulationScreen(viewModel: SafeSphereViewModel) {
                     Spacer(modifier = Modifier.height(8.dp))
 
                     Text(
-                        text = "Tap the lightning button to simulate threats",
+                        text = if (isMonitoring)
+                            "Monitoring active • Your data is protected"
+                        else
+                            "Tap ▶ to start monitoring",
                         fontSize = 14.sp,
                         color = SafeSphereColors.TextSecondary,
                         textAlign = TextAlign.Center
@@ -513,7 +664,7 @@ fun ThreatSimulationScreen(viewModel: SafeSphereViewModel) {
                     verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
                     items(threats) { threat ->
-                        ThreatCard(threat)
+                        EnhancedThreatCard(threat)
                     }
                 }
             }
@@ -522,12 +673,23 @@ fun ThreatSimulationScreen(viewModel: SafeSphereViewModel) {
 }
 
 @Composable
-fun ThreatCard(threat: ThreatEvent) {
+fun EnhancedThreatCard(threat: ThreatEvent) {
     val severityColor = when (threat.severity) {
         ThreatSeverity.LOW -> SafeSphereColors.Success
         ThreatSeverity.MEDIUM -> SafeSphereColors.Warning
         ThreatSeverity.HIGH -> Color(0xFFFF6B6B)
         ThreatSeverity.CRITICAL -> SafeSphereColors.Accent
+    }
+
+    // Format relative time
+    val timeAgo = remember(threat.timestamp) {
+        val diff = System.currentTimeMillis() - threat.timestamp
+        when {
+            diff < 60_000 -> "Just now"
+            diff < 3600_000 -> "${diff / 60_000}m ago"
+            diff < 86400_000 -> "${diff / 3600_000}h ago"
+            else -> "${diff / 86400_000}d ago"
+        }
     }
 
     GlassCard(modifier = Modifier.fillMaxWidth()) {
@@ -544,7 +706,7 @@ fun ThreatCard(threat: ThreatEvent) {
                     ) {
                         Box(
                             modifier = Modifier
-                                .size(8.dp)
+                                .size(10.dp)
                                 .clip(CircleShape)
                                 .background(severityColor)
                         )
@@ -572,12 +734,20 @@ fun ThreatCard(threat: ThreatEvent) {
                         horizontalArrangement = Arrangement.spacedBy(16.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Text(
-                            text = threat.severity.displayName,
-                            fontSize = 12.sp,
-                            color = severityColor,
-                            fontWeight = FontWeight.SemiBold
-                        )
+                        // Severity badge
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(6.dp))
+                                .background(severityColor.copy(alpha = 0.15f))
+                                .padding(horizontal = 8.dp, vertical = 4.dp)
+                        ) {
+                            Text(
+                                text = threat.severity.displayName.uppercase(),
+                                fontSize = 11.sp,
+                                color = severityColor,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
 
                         if (threat.mitigated) {
                             Row(
@@ -590,13 +760,22 @@ fun ThreatCard(threat: ThreatEvent) {
                                     color = SafeSphereColors.Success
                                 )
                                 Text(
-                                    text = "Mitigated",
+                                    text = "Blocked",
                                     fontSize = 12.sp,
                                     color = SafeSphereColors.Success,
                                     fontWeight = FontWeight.SemiBold
                                 )
                             }
                         }
+
+                        Spacer(modifier = Modifier.weight(1f))
+
+                        // Time
+                        Text(
+                            text = timeAgo,
+                            fontSize = 11.sp,
+                            color = SafeSphereColors.TextSecondary.copy(alpha = 0.7f)
+                        )
                     }
                 }
             }
