@@ -206,6 +206,10 @@ fun SafeSphereApp(viewModel: SafeSphereViewModel) {
                                 SafeSphereScreen.SETTINGS -> SettingsScreen(viewModel)
                                 SafeSphereScreen.MODELS -> ModelsScreen(viewModel)
                                 SafeSphereScreen.NOTIFICATIONS -> NotificationsScreen(viewModel)
+                                SafeSphereScreen.PASSWORD_HEALTH -> PasswordHealthScreen(
+                                    viewModel = viewModel,
+                                    onNavigateBack = { viewModel.navigateBack() }
+                                )
                                 else -> {}
                             }
                         }
@@ -568,6 +572,7 @@ fun getScreenTitle(screen: SafeSphereScreen): String {
         SafeSphereScreen.SETTINGS -> "Settings"
         SafeSphereScreen.MODELS -> "AI Models"
         SafeSphereScreen.NOTIFICATIONS -> "Notifications"
+        SafeSphereScreen.PASSWORD_HEALTH -> "Password Health"
         else -> "SafeSphere"
     }
 }
@@ -757,6 +762,20 @@ fun QuickActionButton(
 fun DashboardScreen(viewModel: SafeSphereViewModel) {
     val isOffline by viewModel.isOfflineMode.collectAsState()
     val stats by viewModel.storageStats.collectAsState()
+    val vaultItems by viewModel.vaultItems.collectAsState()
+
+    // Calculate password health in real-time
+    val passwordHealth = remember(vaultItems) {
+        if (vaultItems.isEmpty()) {
+            null
+        } else {
+            com.runanywhere.startup_hackathon20.utils.PasswordAnalyzer.analyzePasswords(vaultItems) { encryptedContent ->
+                com.runanywhere.startup_hackathon20.security.SecurityManager.decrypt(
+                    encryptedContent
+                )
+            }
+        }
+    }
 
     Column(
         modifier = Modifier
@@ -814,6 +833,159 @@ fun DashboardScreen(viewModel: SafeSphereViewModel) {
         }
 
         Spacer(modifier = Modifier.height(16.dp))
+
+        // Password Health Card - Show if passwords exist
+        passwordHealth?.let { health ->
+            val breachedCount = health.passwordDetails.count { it.breachResult?.isBreached == true }
+
+            GlassCard(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { viewModel.navigateToScreen(SafeSphereScreen.PASSWORD_HEALTH) }
+            ) {
+                Column(
+                    modifier = Modifier.padding(20.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "🔐 Password Health",
+                            fontSize = 18.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = SafeSphereColors.TextPrimary
+                        )
+
+                        Icon(
+                            imageVector = Icons.Filled.ArrowForward,
+                            contentDescription = "View Details",
+                            tint = SafeSphereColors.Primary,
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(16.dp))
+
+                    // Main content with circular score
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        // Left side: Circular Score Indicator
+                        Box(
+                            contentAlignment = Alignment.Center
+                        ) {
+                            CircularProgressIndicator(
+                                progress = health.overallScore / 100f,
+                                modifier = Modifier.size(100.dp),
+                                strokeWidth = 10.dp,
+                                color = when {
+                                    health.overallScore >= 80 -> Color(0xFF388E3C)
+                                    health.overallScore >= 60 -> Color(0xFFFBC02D)
+                                    else -> Color(0xFFD32F2F)
+                                },
+                                trackColor = SafeSphereColors.TextSecondary.copy(alpha = 0.1f)
+                            )
+
+                            Column(
+                                horizontalAlignment = Alignment.CenterHorizontally
+                            ) {
+                                Text(
+                                    text = "${health.overallScore}",
+                                    fontSize = 28.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = SafeSphereColors.TextPrimary
+                                )
+                                Text(
+                                    text = "/ 100",
+                                    fontSize = 12.sp,
+                                    color = SafeSphereColors.TextSecondary
+                                )
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.width(16.dp))
+
+                        // Right side: Issues list
+                        Column(
+                            modifier = Modifier.weight(1f),
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            // Breach Alert Banner (if any breached passwords)
+                            if (breachedCount > 0) {
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clip(RoundedCornerShape(8.dp))
+                                        .background(Color(0xFFD32F2F).copy(alpha = 0.15f))
+                                        .border(
+                                            width = 1.dp,
+                                            color = Color(0xFFD32F2F).copy(alpha = 0.3f),
+                                            shape = RoundedCornerShape(8.dp)
+                                        )
+                                        .padding(8.dp)
+                                ) {
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                    ) {
+                                        Text(
+                                            text = "🚨",
+                                            fontSize = 16.sp
+                                        )
+                                        Text(
+                                            text = "$breachedCount LEAKED!",
+                                            fontSize = 13.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            color = Color(0xFFD32F2F)
+                                        )
+                                    }
+                                }
+                            }
+
+                            // Issues summary
+                            if (health.weakPasswords > 0 || health.duplicatePasswords > 0 || breachedCount > 0) {
+                                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                    if (breachedCount > 0) {
+                                        Text(
+                                            text = "🚨 $breachedCount breached",
+                                            fontSize = 12.sp,
+                                            color = SafeSphereColors.TextSecondary
+                                        )
+                                    }
+                                    if (health.weakPasswords > 0) {
+                                        Text(
+                                            text = "⚠️ ${health.weakPasswords} weak",
+                                            fontSize = 12.sp,
+                                            color = SafeSphereColors.TextSecondary
+                                        )
+                                    }
+                                    if (health.duplicatePasswords > 0) {
+                                        Text(
+                                            text = "❌ ${health.duplicatePasswords} duplicates",
+                                            fontSize = 12.sp,
+                                            color = SafeSphereColors.TextSecondary
+                                        )
+                                    }
+                                }
+                            } else {
+                                Text(
+                                    text = "✅ All passwords secure!",
+                                    fontSize = 13.sp,
+                                    color = Color(0xFF388E3C),
+                                    fontWeight = FontWeight.Medium
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
+        }
 
         // Quick Access Grid
         Text(
@@ -1115,4 +1287,4 @@ fun VaultItemCard(
     }
 }
 
-// ... Continue in next part ...
+// ... Rest of the code remains the same ...

@@ -17,6 +17,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -76,8 +77,68 @@ fun SafeSphereDrawerContent(
                     )
                 )
         ) {
-            // Profile Section
-            NavigationDrawerHeader(currentUser)
+            // Profile Section - Centered
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(
+                        Brush.verticalGradient(
+                            colors = listOf(
+                                SafeSphereColors.Primary.copy(alpha = 0.15f),
+                                SafeSphereColors.Surface
+                            )
+                        )
+                    )
+                    .padding(vertical = 32.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                // Avatar/Logo (Centered)
+                Box(
+                    modifier = Modifier
+                        .size(80.dp)
+                        .clip(CircleShape)
+                        .background(
+                            Brush.linearGradient(
+                                colors = listOf(
+                                    SafeSphereColors.Primary,
+                                    SafeSphereColors.Secondary
+                                )
+                            )
+                        ),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = "🛡️",
+                        fontSize = 40.sp
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(16.dp))
+
+                // User Name
+                Text(
+                    text = currentUser?.name ?: "Guest User",
+                    fontSize = 20.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = SafeSphereColors.TextPrimary,
+                    textAlign = TextAlign.Center
+                )
+
+                Spacer(modifier = Modifier.height(4.dp))
+
+                // User Email
+                Text(
+                    text = currentUser?.email ?: "guest@safesphere.com",
+                    fontSize = 13.sp,
+                    color = SafeSphereColors.TextSecondary,
+                    textAlign = TextAlign.Center,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.padding(horizontal = 16.dp)
+                )
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
 
             // Navigation Items
             Column(
@@ -86,60 +147,50 @@ fun SafeSphereDrawerContent(
                     .verticalScroll(rememberScrollState())
                     .padding(vertical = 8.dp)
             ) {
+                // Home
                 NavigationDrawerItem(
                     icon = Icons.Filled.Home,
-                    label = "Dashboard",
+                    label = "Home",
                     selected = currentScreen == SafeSphereScreen.DASHBOARD,
                     onClick = {
                         onNavigate(SafeSphereScreen.DASHBOARD)
                     }
                 )
 
+                // About Us
                 NavigationDrawerItem(
-                    icon = Icons.Filled.Lock,
-                    label = "Privacy Vault",
-                    selected = currentScreen == SafeSphereScreen.PRIVACY_VAULT,
+                    iconEmoji = "ℹ️",
+                    label = "About Us",
+                    selected = false,
                     onClick = {
-                        onNavigate(SafeSphereScreen.PRIVACY_VAULT)
+                        // TODO: Add About Us screen
+                        // onNavigate(SafeSphereScreen.ABOUT)
                     }
                 )
 
+                // Blogs
                 NavigationDrawerItem(
-                    iconEmoji = "💬",
-                    label = "AI Chat",
-                    selected = currentScreen == SafeSphereScreen.AI_CHAT,
+                    iconEmoji = "📝",
+                    label = "Blogs",
+                    selected = false,
                     onClick = {
-                        onNavigate(SafeSphereScreen.AI_CHAT)
+                        // TODO: Add Blogs screen
+                        // onNavigate(SafeSphereScreen.BLOGS)
                     }
                 )
 
+                // Contact Us
                 NavigationDrawerItem(
-                    iconEmoji = "📊",
-                    label = "Data Map",
-                    selected = currentScreen == SafeSphereScreen.DATA_MAP,
+                    iconEmoji = "📧",
+                    label = "Contact Us",
+                    selected = false,
                     onClick = {
-                        onNavigate(SafeSphereScreen.DATA_MAP)
+                        // TODO: Add Contact Us screen
+                        // onNavigate(SafeSphereScreen.CONTACT)
                     }
                 )
 
-                NavigationDrawerItem(
-                    iconEmoji = "🛡️",
-                    label = "Threat Simulation",
-                    selected = currentScreen == SafeSphereScreen.THREAT_SIMULATION,
-                    onClick = {
-                        onNavigate(SafeSphereScreen.THREAT_SIMULATION)
-                    }
-                )
-
-                NavigationDrawerItem(
-                    icon = Icons.Filled.Notifications,
-                    label = "Notifications",
-                    selected = currentScreen == SafeSphereScreen.NOTIFICATIONS,
-                    onClick = {
-                        onNavigate(SafeSphereScreen.NOTIFICATIONS)
-                    }
-                )
-
+                // Settings
                 NavigationDrawerItem(
                     icon = Icons.Filled.Settings,
                     label = "Settings",
@@ -150,13 +201,12 @@ fun SafeSphereDrawerContent(
                 )
 
                 NavigationDrawerItem(
-                    iconEmoji = "🤖",
-                    label = "AI Models",
-                    selected = currentScreen == SafeSphereScreen.MODELS,
-                    onClick = {
-                        onNavigate(SafeSphereScreen.MODELS)
-                    }
+                    iconEmoji = "🔐",
+                    label = "Password Health",
+                    selected = currentScreen == SafeSphereScreen.PASSWORD_HEALTH,
+                    onClick = { onNavigate(SafeSphereScreen.PASSWORD_HEALTH) }
                 )
+
             }
 
             // Logout Button at Bottom
@@ -176,113 +226,6 @@ fun SafeSphereDrawerContent(
             )
 
             Spacer(modifier = Modifier.height(8.dp))
-        }
-    }
-}
-
-/**
- * Navigation Drawer Header with User Profile
- */
-@Composable
-fun NavigationDrawerHeader(currentUser: User?) {
-    Box(
-        modifier = Modifier
-            .fillMaxWidth()
-            .background(
-                Brush.verticalGradient(
-                    colors = listOf(
-                        SafeSphereColors.Primary.copy(alpha = 0.2f),
-                        SafeSphereColors.Surface
-                    )
-                )
-            )
-            .padding(16.dp)
-    ) {
-        Column(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalAlignment = Alignment.Start
-        ) {
-            // App Logo/Icon
-            Box(
-                modifier = Modifier
-                    .size(64.dp)
-                    .clip(CircleShape)
-                    .background(
-                        Brush.linearGradient(
-                            colors = listOf(
-                                SafeSphereColors.Primary,
-                                SafeSphereColors.Secondary
-                            )
-                        )
-                    ),
-                contentAlignment = Alignment.Center
-            ) {
-                Text(
-                    text = "🛡️",
-                    fontSize = 32.sp
-                )
-            }
-
-            Spacer(modifier = Modifier.height(12.dp))
-
-            // App Name
-            Text(
-                text = "SafeSphere",
-                fontSize = 20.sp,
-                fontWeight = FontWeight.Bold,
-                color = SafeSphereColors.TextPrimary
-            )
-
-            Spacer(modifier = Modifier.height(4.dp))
-
-            // User Info
-            if (currentUser != null) {
-                Text(
-                    text = "Welcome, ${currentUser.name}",
-                    fontSize = 14.sp,
-                    fontWeight = FontWeight.Medium,
-                    color = SafeSphereColors.Primary
-                )
-
-                Spacer(modifier = Modifier.height(2.dp))
-
-                Text(
-                    text = currentUser.email,
-                    fontSize = 12.sp,
-                    color = SafeSphereColors.TextSecondary,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-            } else {
-                Text(
-                    text = "Your Privacy Guardian",
-                    fontSize = 14.sp,
-                    color = SafeSphereColors.TextSecondary
-                )
-            }
-
-            Spacer(modifier = Modifier.height(8.dp))
-
-            // Security Badge
-            Row(
-                modifier = Modifier
-                    .clip(RoundedCornerShape(8.dp))
-                    .background(SafeSphereColors.Success.copy(alpha = 0.1f))
-                    .padding(horizontal = 8.dp, vertical = 4.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(
-                    text = "🔐",
-                    fontSize = 12.sp
-                )
-                Spacer(modifier = Modifier.width(4.dp))
-                Text(
-                    text = "Secured",
-                    fontSize = 11.sp,
-                    fontWeight = FontWeight.SemiBold,
-                    color = SafeSphereColors.Success
-                )
-            }
         }
     }
 }
