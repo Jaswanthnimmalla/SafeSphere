@@ -31,6 +31,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.runanywhere.startup_hackathon20.data.*
+import com.runanywhere.startup_hackathon20.security.BiometricAuthManager
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -57,8 +58,106 @@ fun LoginScreen(
     var loggedInUser by remember { mutableStateOf<User?>(null) }
 
     val context = androidx.compose.ui.platform.LocalContext.current
+    val activity = context as? androidx.fragment.app.FragmentActivity
     val focusManager = LocalFocusManager.current
     val coroutineScope = rememberCoroutineScope()
+
+    // Biometric state for auto-prompt
+    var biometricAttempts by remember { mutableStateOf(0) }
+    var showBiometricPrompt by remember { mutableStateOf(false) }
+    var biometricExhausted by remember { mutableStateOf(false) }
+    val maxBiometricAttempts = 5
+
+    // Check if biometric should auto-trigger on app open
+    val isBiometricEnabled = remember {
+        BiometricAuthManager.isBiometricLoginEnabled(context)
+    }
+
+    // Auto-trigger biometric on first load if enabled and credentials exist
+    LaunchedEffect(Unit) {
+        if (isBiometricEnabled && activity != null && biometricAttempts == 0) {
+            // Check if saved credentials exist
+            val credentials = BiometricAuthManager.getSavedCredentials(context)
+            if (credentials != null) {
+                showBiometricPrompt = true
+            }
+        }
+    }
+
+    // Show biometric prompt
+    LaunchedEffect(showBiometricPrompt, biometricAttempts) {
+        if (showBiometricPrompt && activity != null && biometricAttempts < maxBiometricAttempts && !biometricExhausted) {
+            showBiometricPrompt = false
+            biometricAttempts++
+
+            BiometricAuthManager.authenticate(
+                activity = activity,
+                title = "Unlock SafeSphere",
+                subtitle = "Attempt $biometricAttempts of $maxBiometricAttempts",
+                negativeButtonText = "Use Password",
+                onSuccess = {
+                    // Biometric success - login with saved credentials
+                    coroutineScope.launch {
+                        val credentials = BiometricAuthManager.getSavedCredentials(context)
+                        if (credentials != null) {
+                            val (savedEmail, savedPassword) = credentials
+                            isLoading = true
+                            val result = onLogin(LoginCredentials(savedEmail, savedPassword))
+                            isLoading = false
+
+                            when (result) {
+                                is AuthResult.Success -> onLoginSuccess(result.user)
+                                is AuthResult.Error -> {
+                                    errorMessage = result.message
+                                    biometricExhausted = true
+                                }
+                            }
+                        }
+                    }
+                },
+                onError = { errorCode, errorString ->
+                    if (errorCode == 10 || errorCode == 13) {
+                        // User cancelled - allow manual login
+                        biometricExhausted = true
+                        errorMessage = "Biometric cancelled. Please use password."
+                    } else if (biometricAttempts < maxBiometricAttempts) {
+                        // Failed attempt - allow retry
+                        errorMessage =
+                            "Attempt $biometricAttempts/$maxBiometricAttempts failed. ${maxBiometricAttempts - biometricAttempts} attempts remaining."
+                        // Auto-trigger next attempt after a brief delay
+                        coroutineScope.launch {
+                            delay(1500)
+                            if (biometricAttempts < maxBiometricAttempts && !biometricExhausted) {
+                                showBiometricPrompt = true
+                            }
+                        }
+                    } else {
+                        // Max attempts reached
+                        errorMessage =
+                            "Maximum biometric attempts reached. Please use password to login."
+                        biometricExhausted = true
+                    }
+                },
+                onFailed = {
+                    if (biometricAttempts < maxBiometricAttempts) {
+                        errorMessage =
+                            "Attempt $biometricAttempts/$maxBiometricAttempts failed. ${maxBiometricAttempts - biometricAttempts} attempts remaining."
+                        // Auto-trigger next attempt after a brief delay
+                        coroutineScope.launch {
+                            delay(1500)
+                            if (biometricAttempts < maxBiometricAttempts && !biometricExhausted) {
+                                showBiometricPrompt = true
+                            }
+                        }
+                    } else {
+                        errorMessage =
+                            "Maximum biometric attempts reached. Please use password to login."
+                        biometricExhausted = true
+                    }
+                }
+            )
+        }
+    }
 
     // Load saved credentials on mount
     LaunchedEffect(Unit) {
@@ -303,6 +402,21 @@ fun LoginScreen(
 
                                     when (result) {
                                         is AuthResult.Success -> {
+                                            // Check if biometric is available and not yet enabled
+                                            val biometricAvailable =
+                                                BiometricAuthManager.isBiometricAvailable(context)
+                                            val biometricEnabled =
+                                                BiometricAuthManager.isBiometricLoginEnabled(context)
+
+                                            if (biometricAvailable is com.runanywhere.startup_hackathon20.security.BiometricAvailability.Available && !biometricEnabled) {
+                                                // Save credentials for biometric login
+                                                BiometricAuthManager.saveCredentialsForBiometric(
+                                                    context,
+                                                    email,
+                                                    password
+                                                )
+                                            }
+
                                             // Check if credentials are already saved
                                             val alreadySaved = savedCredentials.any {
                                                 it.username.equals(email, ignoreCase = true)
@@ -335,22 +449,64 @@ fun LoginScreen(
 
                     Spacer(modifier = Modifier.height(16.dp))
 
-                    // Biometric Login Button (Future feature)
-                    OutlinedButton(
-                        onClick = { /* TODO: Biometric */ },
-                        modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(12.dp),
-                        colors = ButtonDefaults.outlinedButtonColors(
-                            contentColor = SafeSphereColors.Primary
-                        ),
-                        border = BorderStroke(1.dp, SafeSphereColors.Primary.copy(alpha = 0.3f))
-                    ) {
-                        Text(
-                            text = "👍",
-                            fontSize = 20.sp,
-                            modifier = Modifier.padding(end = 8.dp)
-                        )
-                        Text("Login with Fingerprint")
+                    // Biometric Login Button
+                    if (activity != null) {
+                        OutlinedButton(
+                            onClick = {
+                                BiometricAuthManager.authenticate(
+                                    activity = activity,
+                                    title = "Login to SafeSphere",
+                                    subtitle = "Use fingerprint or face to unlock",
+                                    negativeButtonText = "Cancel",
+                                    onSuccess = {
+                                        // Biometric success - try to login with saved credentials
+                                        coroutineScope.launch {
+                                            val credentials =
+                                                BiometricAuthManager.getSavedCredentials(context)
+                                            if (credentials != null) {
+                                                val (savedEmail, savedPassword) = credentials
+                                                isLoading = true
+                                                val result = onLogin(
+                                                    LoginCredentials(
+                                                        savedEmail,
+                                                        savedPassword
+                                                    )
+                                                )
+                                                isLoading = false
+
+                                                when (result) {
+                                                    is AuthResult.Success -> onLoginSuccess(result.user)
+                                                    is AuthResult.Error -> errorMessage =
+                                                        result.message
+                                                }
+                                            } else {
+                                                errorMessage =
+                                                    "Please login with password first to enable biometric"
+                                            }
+                                        }
+                                    },
+                                    onError = { errorCode: Int, errString: String ->
+                                        errorMessage = "Biometric error: $errString"
+                                    },
+                                    onFailed = {
+                                        errorMessage = "Biometric authentication failed"
+                                    }
+                                )
+                            },
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(12.dp),
+                            colors = ButtonDefaults.outlinedButtonColors(
+                                contentColor = SafeSphereColors.Primary
+                            ),
+                            border = BorderStroke(1.dp, SafeSphereColors.Primary.copy(alpha = 0.3f))
+                        ) {
+                            Text(
+                                text = "👍",
+                                fontSize = 20.sp,
+                                modifier = Modifier.padding(end = 8.dp)
+                            )
+                            Text("Login with Fingerprint")
+                        }
                     }
                 }
             }

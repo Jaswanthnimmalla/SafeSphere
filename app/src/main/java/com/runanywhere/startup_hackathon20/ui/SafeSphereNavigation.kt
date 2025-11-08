@@ -157,6 +157,16 @@ fun SafeSphereDrawerContent(
                     }
                 )
 
+                // Passwords
+                NavigationDrawerItem(
+                    iconEmoji = "🔑",
+                    label = "Passwords",
+                    selected = currentScreen == SafeSphereScreen.PASSWORDS,
+                    onClick = {
+                        onNavigate(SafeSphereScreen.PASSWORDS)
+                    }
+                )
+
                 // About Us
                 NavigationDrawerItem(
                     iconEmoji = "ℹ️",
@@ -198,13 +208,6 @@ fun SafeSphereDrawerContent(
                     onClick = {
                         onNavigate(SafeSphereScreen.SETTINGS)
                     }
-                )
-
-                NavigationDrawerItem(
-                    iconEmoji = "🔐",
-                    label = "Password Health",
-                    selected = currentScreen == SafeSphereScreen.PASSWORD_HEALTH,
-                    onClick = { onNavigate(SafeSphereScreen.PASSWORD_HEALTH) }
                 )
 
             }

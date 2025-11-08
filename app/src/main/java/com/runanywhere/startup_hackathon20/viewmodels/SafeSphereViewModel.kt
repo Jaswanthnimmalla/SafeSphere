@@ -650,6 +650,7 @@ enum class SafeSphereScreen {
     ONBOARDING,
     DASHBOARD,
     PRIVACY_VAULT,
+    PASSWORDS,
     AI_CHAT,
     DATA_MAP,
     THREAT_SIMULATION,

@@ -406,71 +406,71 @@ fun ViewVaultItemDialog(
     // Biometric authentication before decrypting
     LaunchedEffect(item.id) {
         if (activity != null) {
-            try {
-                // Initialize biometric manager
-                val biometricManager = com.runanywhere.startup_hackathon20.security.BiometricAuthManager(context)
-                
-                // Check if biometric is available
-                val availability = biometricManager.isBiometricAvailable()
-                
-                if (availability.isAvailable()) {
-                    // Show biometric prompt
-                    val result = biometricManager.authenticate(
-                        activity = activity,
-                        title = "Unlock Password",
-                        subtitle = "Authenticate to view ${item.title}",
-                        description = "Use your fingerprint or device credential",
-                        allowDeviceCredential = true
-                    )
-                    
-                    isAuthenticating = false
-                    
-                    when (result) {
-                        is com.runanywhere.startup_hackathon20.security.AuthenticationResult.Success -> {
-                            // Authentication successful - decrypt content
-                            isLoading = true
-                            viewModel.getDecryptedItem(item.id) { decryptResult ->
-                                isLoading = false
-                                decryptResult.onSuccess { decrypted ->
-                                    decryptedContent = decrypted.content
-                                }.onFailure { e ->
-                                    error = e.message
-                                }
+            // Check if biometric is enabled
+            val isBiometricEnabled = context.getSharedPreferences(
+                "safesphere_prefs",
+                android.content.Context.MODE_PRIVATE
+            )
+                .getBoolean("biometric_enabled", false)
+
+            if (isBiometricEnabled) {
+                // Authenticate with biometric first
+                com.runanywhere.startup_hackathon20.security.BiometricAuthManager.authenticate(
+                    activity = activity,
+                    title = "Unlock Vault Item",
+                    subtitle = "Authenticate to view ${item.title}",
+                    negativeButtonText = "Cancel",
+                    onSuccess = {
+                        // Biometric success - decrypt content
+                        isAuthenticating = false
+                        isLoading = true
+                        viewModel.getDecryptedItem(item.id) { decryptResult ->
+                            isLoading = false
+                            decryptResult.onSuccess { decrypted ->
+                                decryptedContent = decrypted.content
+                            }.onFailure { e ->
+                                error = e.message
                             }
                         }
-                        is com.runanywhere.startup_hackathon20.security.AuthenticationResult.Error -> {
-                            // Authentication failed or canceled
-                            if (result.isRecoverable) {
-                                // User canceled - close dialog
-                                onDismiss()
-                            } else {
-                                authenticationFailed = true
-                                error = "Authentication failed"
-                            }
-                        }
+                    },
+                    onError = { errorCode, errorString ->
+                        // Biometric error
+                        isAuthenticating = false
+                        authenticationFailed = true
+                        error = errorString
+                    },
+                    onFailed = {
+                        // Biometric failed
+                        isAuthenticating = false
+                        authenticationFailed = true
+                        error = "Authentication failed"
                     }
-                } else {
-                    // Biometric not available - show message and decrypt directly
-                    isAuthenticating = false
-                    isLoading = true
-                    viewModel.getDecryptedItem(item.id) { decryptResult ->
-                        isLoading = false
-                        decryptResult.onSuccess { decrypted ->
-                            decryptedContent = decrypted.content
-                        }.onFailure { e ->
-                            error = e.message
-                        }
+                )
+            } else {
+                // No biometric - decrypt directly
+                isAuthenticating = false
+                isLoading = true
+                viewModel.getDecryptedItem(item.id) { decryptResult ->
+                    isLoading = false
+                    decryptResult.onSuccess { decrypted ->
+                        decryptedContent = decrypted.content
+                    }.onFailure { e ->
+                        error = e.message
                     }
                 }
-            } catch (e: Exception) {
-                isAuthenticating = false
-                authenticationFailed = true
-                error = "Error: ${e.message}"
             }
         } else {
-            // Not a FragmentActivity - this shouldn't happen now
+            // No activity context - decrypt directly
             isAuthenticating = false
-            error = "Biometric authentication not supported in this context"
+            isLoading = true
+            viewModel.getDecryptedItem(item.id) { decryptResult ->
+                isLoading = false
+                decryptResult.onSuccess { decrypted ->
+                    decryptedContent = decrypted.content
+                }.onFailure { e ->
+                    error = e.message
+                }
+            }
         }
     }
 

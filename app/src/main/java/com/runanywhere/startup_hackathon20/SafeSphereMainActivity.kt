@@ -68,19 +68,119 @@ class SafeSphereMainActivity : FragmentActivity() {
             }
         }
     }
+
+    override fun onStop() {
+        super.onStop()
+        // Mark app as stopped (going to background)
+        val prefs = getSharedPreferences("safesphere_prefs", MODE_PRIVATE)
+        prefs.edit().putBoolean("app_in_background", true).apply()
+    }
+
+    override fun onStart() {
+        super.onStart()
+        // App is coming to foreground
+        // The lock state will be checked in SafeSphereApp composable
+    }
 }
 
 /**
  * Main app container with navigation
  */
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SafeSphereApp(viewModel: SafeSphereViewModel) {
+    // Splash screen state
+    var showSplash by remember { mutableStateOf(true) }
+
+    if (showSplash) {
+        SplashScreen(onSplashComplete = { showSplash = false })
+    } else {
+        MainAppContent(viewModel)
+    }
+}
+
+/**
+ * Main app content (after splash screen)
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun MainAppContent(viewModel: SafeSphereViewModel) {
     val currentScreen by viewModel.currentScreen.collectAsState()
     val currentUser by viewModel.currentUser.collectAsState()
     val uiMessage by viewModel.uiMessage.collectAsState()
     val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
     val scope = rememberCoroutineScope()
+
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val activity = context as? FragmentActivity
+
+    // Biometric lock state
+    var isAppLocked by remember { mutableStateOf(true) }
+    var biometricAttempts by remember { mutableStateOf(0) }
+    val maxBiometricAttempts = 5
+    var showPasswordFallback by remember { mutableStateOf(false) }
+
+    // Make biometric settings reactive by creating state
+    val prefs =
+        context.getSharedPreferences("safesphere_prefs", android.content.Context.MODE_PRIVATE)
+
+    var isBiometricEnabled by remember {
+        mutableStateOf(prefs.getBoolean("biometric_enabled", false))
+    }
+
+    var wasInBackground by remember {
+        mutableStateOf(prefs.getBoolean("app_in_background", false))
+    }
+
+    // Re-read values on every composition to stay fresh
+    LaunchedEffect(Unit) {
+        isBiometricEnabled = prefs.getBoolean("biometric_enabled", false)
+        wasInBackground = prefs.getBoolean("app_in_background", false)
+
+        android.util.Log.d(
+            "SafeSphere",
+            "App opened - currentUser: ${currentUser != null}, biometric: $isBiometricEnabled, wasInBackground: $wasInBackground"
+        )
+    }
+
+    // Show biometric prompt automatically when app opens (if enabled and user logged in)
+    LaunchedEffect(currentUser, isBiometricEnabled, wasInBackground) {
+        android.util.Log.d(
+            "SafeSphere",
+            "LaunchedEffect triggered - currentUser: ${currentUser != null}, biometric: $isBiometricEnabled, wasInBackground: $wasInBackground"
+        )
+
+        if (currentUser != null && isBiometricEnabled && wasInBackground && activity != null) {
+            android.util.Log.d("SafeSphere", "Showing biometric prompt")
+            // App needs to be unlocked with biometric
+            com.runanywhere.startup_hackathon20.security.BiometricAuthManager.authenticate(
+                activity = activity,
+                title = "Unlock SafeSphere",
+                subtitle = "Use biometric to unlock",
+                onSuccess = {
+                    android.util.Log.d("SafeSphere", "Biometric success")
+                    isAppLocked = false
+                    biometricAttempts = 0
+                    wasInBackground = false
+                    // Clear the background flag
+                    prefs.edit().putBoolean("app_in_background", false).apply()
+                },
+                onError = { errorCode, errorMessage ->
+                    android.util.Log.e("SafeSphere", "Biometric error: $errorCode - $errorMessage")
+                },
+                onFailed = {
+                    android.util.Log.d("SafeSphere", "Biometric failed")
+                    biometricAttempts++
+                    if (biometricAttempts >= maxBiometricAttempts) {
+                        showPasswordFallback = true
+                    }
+                }
+            )
+        } else {
+            android.util.Log.d("SafeSphere", "No biometric required, unlocking")
+            // No biometric required, unlock immediately
+            isAppLocked = false
+        }
+    }
 
     // Handle back button/gesture navigation
     BackHandler(enabled = true) {
@@ -122,95 +222,150 @@ fun SafeSphereApp(viewModel: SafeSphereViewModel) {
                     )
                 )
         ) {
-            // Check if current screen needs drawer
-            if (currentScreen in authScreens) {
-                // Show screens without drawer (Login, Register, Onboarding)
-                when (currentScreen) {
-                    SafeSphereScreen.LOGIN -> LoginScreen(
-                        onLoginSuccess = { user ->
-                            // User logged in successfully
-                        },
-                        onNavigateToRegister = {
-                            viewModel.navigateToScreen(SafeSphereScreen.REGISTER)
-                        },
-                        onLogin = { credentials ->
-                            viewModel.login(credentials)
-                        }
-                    )
-
-                    SafeSphereScreen.REGISTER -> RegisterScreen(
-                        onRegisterSuccess = { user ->
-                            // User registered successfully
-                        },
-                        onNavigateToLogin = {
-                            viewModel.navigateToScreen(SafeSphereScreen.LOGIN)
-                        },
-                        onRegister = { data ->
-                            viewModel.register(data)
-                        }
-                    )
-
-                    SafeSphereScreen.ONBOARDING -> OnboardingScreen(viewModel)
-                    else -> {}
-                }
-            } else {
-                // Show screens WITH navigation drawer and bottom nav
-                ModalNavigationDrawer(
-                    drawerState = drawerState,
-                    gesturesEnabled = true, // Enable swipe gestures
-                    drawerContent = {
-                        SafeSphereDrawerContent(
-                            currentUser = currentUser,
-                            currentScreen = currentScreen,
-                            onNavigate = { screen ->
-                                viewModel.navigateToScreen(screen)
-                                scope.launch { drawerState.close() }
-                            },
-                            onLogout = {
-                                viewModel.logout()
-                            }
-                        )
-                    }
-                ) {
-                    Scaffold(
-                        topBar = {
-                            BeautifulTopBar(
-                                title = getScreenTitle(currentScreen),
-                                onMenuClick = {
-                                    scope.launch {
-                                        if (drawerState.isClosed) drawerState.open()
-                                        else drawerState.close()
-                                    }
+            // Show biometric lock screen if app is locked
+            if (isAppLocked && currentUser != null && isBiometricEnabled) {
+                BiometricLockScreen(
+                    attempts = biometricAttempts,
+                    maxAttempts = maxBiometricAttempts,
+                    showPasswordFallback = showPasswordFallback,
+                    onRetryBiometric = {
+                        if (activity != null && biometricAttempts < maxBiometricAttempts) {
+                            com.runanywhere.startup_hackathon20.security.BiometricAuthManager.authenticate(
+                                activity = activity,
+                                title = "Unlock SafeSphere",
+                                subtitle = "Attempt ${biometricAttempts + 1} of $maxBiometricAttempts",
+                                onSuccess = {
+                                    isAppLocked = false
+                                    biometricAttempts = 0
+                                    wasInBackground = false
+                                    prefs.edit().putBoolean("app_in_background", false).apply()
                                 },
-                                onNotificationClick = {
-                                    viewModel.navigateToScreen(SafeSphereScreen.NOTIFICATIONS)
+                                onError = { errorCode, errorMessage ->
+                                    // Error occurred
+                                },
+                                onFailed = {
+                                    biometricAttempts++
+                                    if (biometricAttempts >= maxBiometricAttempts) {
+                                        showPasswordFallback = true
+                                    }
                                 }
                             )
-                        },
-                        bottomBar = {
-                            // Removed bottom bar
-                        },
-                        containerColor = Color.Transparent
-                    ) { paddingValues ->
-                        Box(
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .padding(paddingValues)
-                        ) {
-                            when (currentScreen) {
-                                SafeSphereScreen.DASHBOARD -> DashboardScreen(viewModel)
-                                SafeSphereScreen.PRIVACY_VAULT -> PrivacyVaultScreen(viewModel)
-                                SafeSphereScreen.AI_CHAT -> AIChatScreen(viewModel)
-                                SafeSphereScreen.DATA_MAP -> DataMapScreen(viewModel)
-                                SafeSphereScreen.THREAT_SIMULATION -> ThreatSimulationScreen(viewModel)
-                                SafeSphereScreen.SETTINGS -> SettingsScreen(viewModel)
-                                SafeSphereScreen.MODELS -> ModelsScreen(viewModel)
-                                SafeSphereScreen.NOTIFICATIONS -> NotificationsScreen(viewModel)
-                                SafeSphereScreen.PASSWORD_HEALTH -> PasswordHealthScreen(
-                                    viewModel = viewModel,
-                                    onNavigateBack = { viewModel.navigateBack() }
+                        }
+                    },
+                    onPasswordLogin = { email, password ->
+                        // Verify password
+                        scope.launch {
+                            val credentials = LoginCredentials(email, password)
+                            val result = viewModel.login(credentials)
+                            // If login successful, unlock app
+                            if (result is AuthResult.Success) {
+                                isAppLocked = false
+                                biometricAttempts = 0
+                                showPasswordFallback = false
+                                wasInBackground = false
+                                // Clear the background flag
+                                prefs.edit().putBoolean("app_in_background", false).apply()
+                            }
+                        }
+                    }
+                )
+            } else {
+                // Show normal app content
+                // Check if current screen needs drawer
+                if (currentScreen in authScreens) {
+                    // Show screens without drawer (Login, Register, Onboarding)
+                    when (currentScreen) {
+                        SafeSphereScreen.LOGIN -> LoginScreen(
+                            onLoginSuccess = { user ->
+                                // User logged in successfully
+                            },
+                            onNavigateToRegister = {
+                                viewModel.navigateToScreen(SafeSphereScreen.REGISTER)
+                            },
+                            onLogin = { credentials ->
+                                viewModel.login(credentials)
+                            }
+                        )
+
+                        SafeSphereScreen.REGISTER -> RegisterScreen(
+                            onRegisterSuccess = { user ->
+                                // User registered successfully
+                            },
+                            onNavigateToLogin = {
+                                viewModel.navigateToScreen(SafeSphereScreen.LOGIN)
+                            },
+                            onRegister = { data ->
+                                viewModel.register(data)
+                            }
+                        )
+
+                        SafeSphereScreen.ONBOARDING -> OnboardingScreen(viewModel)
+                        else -> {}
+                    }
+                } else {
+                    // Show screens WITH navigation drawer and bottom nav
+                    ModalNavigationDrawer(
+                        drawerState = drawerState,
+                        gesturesEnabled = true, // Enable swipe gestures
+                        drawerContent = {
+                            SafeSphereDrawerContent(
+                                currentUser = currentUser,
+                                currentScreen = currentScreen,
+                                onNavigate = { screen ->
+                                    viewModel.navigateToScreen(screen)
+                                    scope.launch { drawerState.close() }
+                                },
+                                onLogout = {
+                                    viewModel.logout()
+                                }
+                            )
+                        }
+                    ) {
+                        Scaffold(
+                            topBar = {
+                                BeautifulTopBar(
+                                    title = getScreenTitle(currentScreen),
+                                    onMenuClick = {
+                                        scope.launch {
+                                            if (drawerState.isClosed) drawerState.open()
+                                            else drawerState.close()
+                                        }
+                                    },
+                                    onNotificationClick = {
+                                        viewModel.navigateToScreen(SafeSphereScreen.NOTIFICATIONS)
+                                    }
                                 )
-                                else -> {}
+                            },
+                            bottomBar = {
+                                // Removed bottom bar
+                            },
+                            containerColor = Color.Transparent
+                        ) { paddingValues ->
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .padding(paddingValues)
+                            ) {
+                                when (currentScreen) {
+                                    SafeSphereScreen.DASHBOARD -> DashboardScreen(viewModel)
+                                    SafeSphereScreen.PRIVACY_VAULT -> PrivacyVaultScreen(viewModel)
+                                    SafeSphereScreen.PASSWORDS -> PasswordsScreen(viewModel)
+                                    SafeSphereScreen.AI_CHAT -> AIChatScreen(viewModel)
+                                    SafeSphereScreen.DATA_MAP -> DataMapScreen(viewModel)
+                                    SafeSphereScreen.THREAT_SIMULATION -> ThreatSimulationScreen(
+                                        viewModel
+                                    )
+
+                                    SafeSphereScreen.SETTINGS -> SettingsScreen(viewModel)
+                                    SafeSphereScreen.MODELS -> ModelsScreen(viewModel)
+                                    SafeSphereScreen.NOTIFICATIONS -> NotificationsScreen(viewModel)
+                                    SafeSphereScreen.PASSWORD_HEALTH -> PasswordHealthScreen(
+                                        viewModel = viewModel,
+                                        onNavigateBack = { viewModel.navigateBack() }
+                                    )
+
+                                    else -> {}
+                                }
                             }
                         }
                     }
@@ -232,6 +387,149 @@ fun SafeSphereApp(viewModel: SafeSphereViewModel) {
                 LaunchedEffect(message) {
                     kotlinx.coroutines.delay(3000)
                     viewModel.clearMessage()
+                }
+            }
+        }
+    }
+}
+
+/**
+ * Biometric Lock Screen - Shown when app is locked
+ */
+@Composable
+fun BiometricLockScreen(
+    attempts: Int,
+    maxAttempts: Int,
+    showPasswordFallback: Boolean,
+    onRetryBiometric: () -> Unit,
+    onPasswordLogin: (email: String, password: String) -> Unit
+) {
+    var email by remember { mutableStateOf("") }
+    var password by remember { mutableStateOf("") }
+
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(
+                Brush.verticalGradient(
+                    colors = listOf(
+                        SafeSphereColors.Background,
+                        SafeSphereColors.BackgroundDark
+                    )
+                )
+            ),
+        contentAlignment = Alignment.Center
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(32.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center
+        ) {
+            // Logo
+            Text(
+                text = "🔐",
+                fontSize = 80.sp
+            )
+
+            Spacer(modifier = Modifier.height(24.dp))
+
+            Text(
+                text = "SafeSphere Locked",
+                fontSize = 28.sp,
+                fontWeight = FontWeight.Bold,
+                color = SafeSphereColors.TextPrimary
+            )
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            if (showPasswordFallback) {
+                // Show password login form
+                Text(
+                    text = "Maximum biometric attempts reached.\nPlease enter your credentials.",
+                    fontSize = 14.sp,
+                    color = SafeSphereColors.Error,
+                    textAlign = TextAlign.Center
+                )
+
+                Spacer(modifier = Modifier.height(24.dp))
+
+                // Email field
+                OutlinedTextField(
+                    value = email,
+                    onValueChange = { email = it },
+                    label = { Text("Email") },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true
+                )
+
+                Spacer(modifier = Modifier.height(12.dp))
+
+                // Password field
+                OutlinedTextField(
+                    value = password,
+                    onValueChange = { password = it },
+                    label = { Text("Password") },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true,
+                    visualTransformation = androidx.compose.ui.text.input.PasswordVisualTransformation()
+                )
+
+                Spacer(modifier = Modifier.height(24.dp))
+
+                Button(
+                    onClick = { onPasswordLogin(email, password) },
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = SafeSphereColors.Primary
+                    )
+                ) {
+                    Text("Unlock")
+                }
+            } else {
+                // Show biometric prompt status
+                Text(
+                    text = "Use fingerprint or face to unlock",
+                    fontSize = 14.sp,
+                    color = SafeSphereColors.TextSecondary,
+                    textAlign = TextAlign.Center
+                )
+
+                Spacer(modifier = Modifier.height(16.dp))
+
+                if (attempts > 0) {
+                    Text(
+                        text = "Attempt $attempts of $maxAttempts failed",
+                        fontSize = 12.sp,
+                        color = SafeSphereColors.Error
+                    )
+
+                    Text(
+                        text = "${maxAttempts - attempts} attempts remaining",
+                        fontSize = 12.sp,
+                        color = SafeSphereColors.TextSecondary
+                    )
+
+                    Spacer(modifier = Modifier.height(16.dp))
+                }
+
+                // Fingerprint icon
+                Text(
+                    text = "👆",
+                    fontSize = 64.sp
+                )
+
+                Spacer(modifier = Modifier.height(24.dp))
+
+                Button(
+                    onClick = onRetryBiometric,
+                    enabled = attempts < maxAttempts,
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = SafeSphereColors.Primary
+                    )
+                ) {
+                    Text("Try Again")
                 }
             }
         }
@@ -763,6 +1061,23 @@ fun DashboardScreen(viewModel: SafeSphereViewModel) {
     val isOffline by viewModel.isOfflineMode.collectAsState()
     val stats by viewModel.storageStats.collectAsState()
     val vaultItems by viewModel.vaultItems.collectAsState()
+    
+    val context = androidx.compose.ui.platform.LocalContext.current
+    
+    // Get password repository and count
+    val passwordRepository = remember { com.runanywhere.startup_hackathon20.data.PasswordVaultRepository.getInstance(context) }
+    val savedPasswords by passwordRepository.passwords.collectAsState()
+    val passwordCount = savedPasswords.size
+    
+    // Check autofill status
+    val isAutofillEnabled = remember {
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+            val autofillManager = context.getSystemService(android.view.autofill.AutofillManager::class.java)
+            autofillManager?.hasEnabledAutofillServices() == true
+        } else {
+            false
+        }
+    }
 
     // Calculate password health in real-time
     val passwordHealth = remember(vaultItems) {
@@ -833,6 +1148,22 @@ fun DashboardScreen(viewModel: SafeSphereViewModel) {
         }
 
         Spacer(modifier = Modifier.height(16.dp))
+        
+        // PASSWORD MANAGER QUICK ACCESS CARD - NEW PROMINENT SECTION
+        PasswordManagerQuickAccessCard(
+            passwordCount = passwordCount,
+            isAutofillEnabled = isAutofillEnabled,
+            onViewAllClick = { viewModel.navigateToScreen(SafeSphereScreen.PASSWORDS) },
+            onEnableAutofillClick = {
+                if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+                    val intent = android.content.Intent(android.provider.Settings.ACTION_REQUEST_SET_AUTOFILL_SERVICE)
+                    context.startActivity(intent)
+                }
+            },
+            onAddPasswordClick = { viewModel.navigateToScreen(SafeSphereScreen.PASSWORDS) }
+        )
+        
+        Spacer(modifier = Modifier.height(16.dp))
 
         // Password Health Card - Show if passwords exist
         passwordHealth?.let { health ->
@@ -868,15 +1199,49 @@ fun DashboardScreen(viewModel: SafeSphereViewModel) {
 
                     Spacer(modifier = Modifier.height(16.dp))
 
-                    // Main content with circular score
+                    // Breach Alert Banner (if any breached passwords)
+                    if (breachedCount > 0) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(Color(0xFFD32F2F).copy(alpha = 0.15f))
+                                .border(
+                                    width = 1.dp,
+                                    color = Color(0xFFD32F2F).copy(alpha = 0.3f),
+                                    shape = RoundedCornerShape(8.dp)
+                                )
+                                .padding(12.dp)
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                Text(
+                                    text = "🚨",
+                                    fontSize = 20.sp
+                                )
+                                Text(
+                                    text = "$breachedCount LEAKED!",
+                                    fontSize = 14.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = Color(0xFFD32F2F)
+                                )
+                            }
+                        }
+                        Spacer(modifier = Modifier.height(12.dp))
+                    }
+
+                    // Score and Issues
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        // Left side: Circular Score Indicator
+                        // LEFT: Circular Score Indicator (like Security Score)
                         Box(
-                            contentAlignment = Alignment.Center
+                            contentAlignment = Alignment.Center,
+                            modifier = Modifier.size(100.dp)
                         ) {
                             CircularProgressIndicator(
                                 progress = health.overallScore / 100f,
@@ -897,7 +1262,11 @@ fun DashboardScreen(viewModel: SafeSphereViewModel) {
                                     text = "${health.overallScore}",
                                     fontSize = 28.sp,
                                     fontWeight = FontWeight.Bold,
-                                    color = SafeSphereColors.TextPrimary
+                                    color = when {
+                                        health.overallScore >= 80 -> Color(0xFF388E3C)
+                                        health.overallScore >= 60 -> Color(0xFFFBC02D)
+                                        else -> Color(0xFFD32F2F)
+                                    }
                                 )
                                 Text(
                                     text = "/ 100",
@@ -909,64 +1278,30 @@ fun DashboardScreen(viewModel: SafeSphereViewModel) {
 
                         Spacer(modifier = Modifier.width(16.dp))
 
-                        // Right side: Issues list
-                        Column(
-                            modifier = Modifier.weight(1f),
-                            verticalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            // Breach Alert Banner (if any breached passwords)
-                            if (breachedCount > 0) {
-                                Box(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .clip(RoundedCornerShape(8.dp))
-                                        .background(Color(0xFFD32F2F).copy(alpha = 0.15f))
-                                        .border(
-                                            width = 1.dp,
-                                            color = Color(0xFFD32F2F).copy(alpha = 0.3f),
-                                            shape = RoundedCornerShape(8.dp)
-                                        )
-                                        .padding(8.dp)
-                                ) {
-                                    Row(
-                                        verticalAlignment = Alignment.CenterVertically,
-                                        horizontalArrangement = Arrangement.spacedBy(6.dp)
-                                    ) {
-                                        Text(
-                                            text = "🚨",
-                                            fontSize = 16.sp
-                                        )
-                                        Text(
-                                            text = "$breachedCount LEAKED!",
-                                            fontSize = 13.sp,
-                                            fontWeight = FontWeight.Bold,
-                                            color = Color(0xFFD32F2F)
-                                        )
-                                    }
-                                }
-                            }
-
-                            // Issues summary
+                        // RIGHT: Issues Summary
+                        Column(modifier = Modifier.weight(1f)) {
+                            // Issues list
                             if (health.weakPasswords > 0 || health.duplicatePasswords > 0 || breachedCount > 0) {
                                 Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                                     if (breachedCount > 0) {
                                         Text(
                                             text = "🚨 $breachedCount breached",
-                                            fontSize = 12.sp,
-                                            color = SafeSphereColors.TextSecondary
+                                            fontSize = 13.sp,
+                                            color = Color(0xFFD32F2F),
+                                            fontWeight = FontWeight.SemiBold
                                         )
                                     }
                                     if (health.weakPasswords > 0) {
                                         Text(
                                             text = "⚠️ ${health.weakPasswords} weak",
-                                            fontSize = 12.sp,
+                                            fontSize = 13.sp,
                                             color = SafeSphereColors.TextSecondary
                                         )
                                     }
                                     if (health.duplicatePasswords > 0) {
                                         Text(
                                             text = "❌ ${health.duplicatePasswords} duplicates",
-                                            fontSize = 12.sp,
+                                            fontSize = 13.sp,
                                             color = SafeSphereColors.TextSecondary
                                         )
                                     }
@@ -974,9 +1309,9 @@ fun DashboardScreen(viewModel: SafeSphereViewModel) {
                             } else {
                                 Text(
                                     text = "✅ All passwords secure!",
-                                    fontSize = 13.sp,
+                                    fontSize = 14.sp,
                                     color = Color(0xFF388E3C),
-                                    fontWeight = FontWeight.Medium
+                                    fontWeight = FontWeight.SemiBold
                                 )
                             }
                         }
@@ -999,6 +1334,8 @@ fun DashboardScreen(viewModel: SafeSphereViewModel) {
         Column(
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
+            // Password Manager Quick Access Card is positioned above the grid below
+
             Row(
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
                 modifier = Modifier.fillMaxWidth()
@@ -1053,6 +1390,124 @@ fun DashboardScreen(viewModel: SafeSphereViewModel) {
                 onClick = { viewModel.navigateToScreen(SafeSphereScreen.MODELS) },
                 modifier = Modifier.fillMaxWidth()
             )
+        }
+    }
+}
+
+/**
+ * Password Manager Quick Access Card
+ */
+@Composable
+fun PasswordManagerQuickAccessCard(
+    passwordCount: Int,
+    isAutofillEnabled: Boolean,
+    onViewAllClick: () -> Unit,
+    onEnableAutofillClick: () -> Unit,
+    onAddPasswordClick: () -> Unit
+) {
+    GlassCard(
+        modifier = Modifier
+            .fillMaxWidth()
+            .heightIn(min = 110.dp)
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(20.dp),
+            horizontalAlignment = Alignment.Start,
+            verticalArrangement = Arrangement.Center
+        ) {
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                Column {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            text = "🗝️",
+                            fontSize = 32.sp,
+                            modifier = Modifier.padding(end = 8.dp)
+                        )
+                        Text(
+                            text = "Password Manager",
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 18.sp,
+                            color = SafeSphereColors.TextPrimary
+                        )
+                    }
+                }
+                // View All button
+                GlassButton(
+                    text = "View All",
+                    onClick = onViewAllClick,
+                    modifier = Modifier
+                        .height(34.dp)
+                        .align(Alignment.CenterVertically),
+                    primary = true
+                )
+            }
+
+            Spacer(modifier = Modifier.height(10.dp))
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    text = "$passwordCount Saved Password${if (passwordCount == 1) "" else "s"}",
+                    fontSize = 15.sp,
+                    color = SafeSphereColors.TextSecondary
+                )
+
+                Spacer(Modifier.width(22.dp))
+
+                // Autofill Status
+                Box(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(
+                            if (isAutofillEnabled) SafeSphereColors.Success.copy(alpha = 0.18f)
+                            else SafeSphereColors.Warning.copy(alpha = 0.18f)
+                        )
+                        .padding(horizontal = 10.dp, vertical = 4.dp)
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            text = if (isAutofillEnabled) "Autofill: ON" else "Autofill: OFF",
+                            fontWeight = FontWeight.Medium,
+                            color = if (isAutofillEnabled) SafeSphereColors.Success else SafeSphereColors.Warning,
+                            fontSize = 13.sp,
+                        )
+                        if (!isAutofillEnabled) {
+                            // Add enable autofill quick action
+                            TextButton(
+                                onClick = onEnableAutofillClick,
+                                contentPadding = PaddingValues(0.dp)
+                            ) {
+                                Text(
+                                    text = "Enable",
+                                    color = SafeSphereColors.Primary,
+                                    fontSize = 13.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    modifier = Modifier.padding(start = 4.dp)
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+            
+            Spacer(modifier = Modifier.height(6.dp))
+
+            Row(
+                horizontalArrangement = Arrangement.Start,
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                GlassButton(
+                    text = "Add Password",
+                    onClick = onAddPasswordClick,
+                    modifier = Modifier.height(34.dp),
+                    primary = false
+                )
+            }
         }
     }
 }
@@ -1287,4 +1742,4 @@ fun VaultItemCard(
     }
 }
 
-// ... Rest of the code remains the same ...
+// ... Continue in next part ...

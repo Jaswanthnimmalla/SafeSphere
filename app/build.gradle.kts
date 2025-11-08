@@ -14,20 +14,53 @@ android {
         minSdk = 24
         targetSdk = 36
         versionCode = 1
-        versionName = "1.0"
+        versionName = "1.0.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+
+        // For Play Store
+        setProperty("archivesBaseName", "SafeSphere-v$versionName")
+    }
+
+    signingConfigs {
+        create("release") {
+            // Read password from gradle.properties
+            // Password: SafeSphere2025
+            storeFile = file("../safesphere-release.keystore")
+            storePassword = "SafeSphere2025"
+            keyAlias = "safesphere"
+            keyPassword = "SafeSphere2025"
+        }
     }
 
     buildTypes {
         release {
-            isMinifyEnabled = false
+            // Enable code shrinking, obfuscation, and optimization
+            isMinifyEnabled = true
+            isShrinkResources = true
+
+            // Use R8 for code optimization
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
+
+            // Sign with release key
+            signingConfig = signingConfigs.getByName("release")
+
+            // Optimize for Play Store
+            isDebuggable = false
+            isJniDebuggable = false
+            renderscriptOptimLevel = 3
+        }
+
+        debug {
+            applicationIdSuffix = ".debug"
+            versionNameSuffix = "-DEBUG"
+            isDebuggable = true
         }
     }
+
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
@@ -37,6 +70,15 @@ android {
     }
     buildFeatures {
         compose = true
+    }
+
+    // Optimize APK size for Play Store
+    packaging {
+        resources {
+            excludes += "/META-INF/{AL2.0,LGPL2.1}"
+            excludes += "/META-INF/LICENSE*"
+            excludes += "/META-INF/NOTICE*"
+        }
     }
 }
 

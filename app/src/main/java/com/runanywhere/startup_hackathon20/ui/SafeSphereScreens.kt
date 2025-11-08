@@ -791,6 +791,20 @@ fun SettingsScreen(viewModel: SafeSphereViewModel) {
     val securityStatus =
         remember { com.runanywhere.startup_hackathon20.security.SecurityManager.getSecurityStatus() }
 
+    val context = androidx.compose.ui.platform.LocalContext.current
+    var isBiometricEnabled by remember {
+        mutableStateOf(
+            context.getSharedPreferences("safesphere_prefs", android.content.Context.MODE_PRIVATE)
+                .getBoolean("biometric_enabled", false)
+        )
+    }
+
+    val biometricAvailable = remember {
+        com.runanywhere.startup_hackathon20.security.BiometricAuthManager.isBiometricAvailable(
+            context
+        )
+    }
+
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -854,6 +868,47 @@ fun SettingsScreen(viewModel: SafeSphereViewModel) {
 
             GlassCard(modifier = Modifier.fillMaxWidth()) {
                 Column(modifier = Modifier.padding(20.dp)) {
+                    // Biometric Login Toggle
+                    SettingToggle(
+                        label = "Biometric Login",
+                        description = if (biometricAvailable is com.runanywhere.startup_hackathon20.security.BiometricAvailability.Available) {
+                            "Use fingerprint or face to unlock SafeSphere"
+                        } else {
+                            "Biometric authentication not available on this device"
+                        },
+                        enabled = isBiometricEnabled,
+                        onToggle = { enabled ->
+                            if (biometricAvailable is com.runanywhere.startup_hackathon20.security.BiometricAvailability.Available) {
+                                if (enabled) {
+                                    // Enable biometric
+                                    val prefs = context.getSharedPreferences(
+                                        "safesphere_prefs",
+                                        android.content.Context.MODE_PRIVATE
+                                    )
+                                    prefs.edit().putBoolean("biometric_enabled", true).apply()
+                                    isBiometricEnabled = true
+                                } else {
+                                    // Disable biometric
+                                    val prefs = context.getSharedPreferences(
+                                        "safesphere_prefs",
+                                        android.content.Context.MODE_PRIVATE
+                                    )
+                                    prefs.edit().putBoolean("biometric_enabled", false).apply()
+                                    // Also clear BiometricAuthManager data
+                                    com.runanywhere.startup_hackathon20.security.BiometricAuthManager.disableBiometricLogin(
+                                        context
+                                    )
+                                    isBiometricEnabled = false
+                                }
+                            }
+                        }
+                    )
+
+                    Divider(
+                        color = SafeSphereColors.TextSecondary.copy(alpha = 0.1f),
+                        modifier = Modifier.padding(vertical = 12.dp)
+                    )
+
                     SettingToggle(
                         label = "Offline Mode",
                         description = "All operations run locally",

@@ -106,3 +106,16 @@ Thumbs.db
 
 # Claude Code settings (if you want to keep local settings private)
 .claude/settings.local.json
+
+# Keystore files - NEVER commit these!
+*.keystore
+*.jks
+
+# Gradle properties with passwords - NEVER commit with real passwords!
+gradle.properties
+
+# Release builds
+*.aab
+*.apk
+/app/release/
+/app/build/outputs/
