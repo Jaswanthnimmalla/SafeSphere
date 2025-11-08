@@ -945,12 +945,13 @@ fun ViewPasswordDialog(password: PasswordVaultEntry, onDismiss: () -> Unit) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val repository = remember { PasswordVaultRepository.getInstance(context) }
-    
+
     var decryptedPassword by remember { mutableStateOf<String?>(null) }
     var isLoading by remember { mutableStateOf(false) }
     var passwordVisible by remember { mutableStateOf(false) }
-    var requiresBiometric by remember { mutableStateOf(true) }
-    var biometricAuthenticated by remember { mutableStateOf(false) }
+    var isAuthenticated by remember { mutableStateOf(false) }
+    var showAuthenticationError by remember { mutableStateOf(false) }
+    var isAuthenticating by remember { mutableStateOf(false) }
 
     // Check if biometric is available
     val biometricAvailability = remember {
@@ -958,261 +959,413 @@ fun ViewPasswordDialog(password: PasswordVaultEntry, onDismiss: () -> Unit) {
     }
     val isBiometricAvailable = biometricAvailability is com.runanywhere.startup_hackathon20.security.BiometricAvailability.Available
 
+    // Trigger biometric authentication on dialog open
+    LaunchedEffect(Unit) {
+        if (isBiometricAvailable) {
+            val activity = context as? androidx.fragment.app.FragmentActivity
+            if (activity != null) {
+                isAuthenticating = true
+                com.runanywhere.startup_hackathon20.security.BiometricAuthManager.authenticate(
+                    activity = activity,
+                    title = "🔐 Unlock Password",
+                    subtitle = "Authenticate to view ${password.service} credentials",
+                    negativeButtonText = "Cancel",
+                    onSuccess = {
+                        isAuthenticating = false
+                        isAuthenticated = true
+                        // Auto-decrypt password after authentication
+                        isLoading = true
+                        scope.launch {
+                            try {
+                                val result = repository.getDecryptedPassword(password.id)
+                                result.onSuccess { decrypted ->
+                                    decryptedPassword = decrypted.password
+                                }
+                            } catch (e: Exception) {
+                                Toast.makeText(
+                                    context,
+                                    "Failed to decrypt: ${e.message}",
+                                    Toast.LENGTH_SHORT
+                                ).show()
+                            } finally {
+                                isLoading = false
+                            }
+                        }
+                    },
+                    onError = { errorCode, errorMessage ->
+                        isAuthenticating = false
+                        showAuthenticationError = true
+                        onDismiss() // Close dialog on authentication error
+                    },
+                    onFailed = {
+                        isAuthenticating = false
+                        showAuthenticationError = true
+                        onDismiss() // Close dialog on authentication failure
+                    }
+                )
+            } else {
+                // No activity context, allow access without biometric
+                isAuthenticated = true
+                isLoading = true
+                scope.launch {
+                    try {
+                        val result = repository.getDecryptedPassword(password.id)
+                        result.onSuccess { decrypted ->
+                            decryptedPassword = decrypted.password
+                        }
+                    } catch (e: Exception) {
+                        Toast.makeText(
+                            context,
+                            "Failed to decrypt: ${e.message}",
+                            Toast.LENGTH_SHORT
+                        ).show()
+                    } finally {
+                        isLoading = false
+                    }
+                }
+            }
+        } else {
+            // No biometric available, allow access directly
+            isAuthenticated = true
+            isLoading = true
+            scope.launch {
+                try {
+                    val result = repository.getDecryptedPassword(password.id)
+                    result.onSuccess { decrypted ->
+                        decryptedPassword = decrypted.password
+                    }
+                } catch (e: Exception) {
+                    Toast.makeText(
+                        context,
+                        "Failed to decrypt: ${e.message}",
+                        Toast.LENGTH_SHORT
+                    ).show()
+                } finally {
+                    isLoading = false
+                }
+            }
+        }
+    }
+
     Dialog(onDismissRequest = onDismiss) {
         GlassCard(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(16.dp)
-                .verticalScroll(rememberScrollState())
+                .heightIn(min = 300.dp)
         ) {
             Column(
-                modifier = Modifier.padding(24.dp)
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(24.dp)
             ) {
-                // Header
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.Top
-                ) {
-                    Column(modifier = Modifier.weight(1f)) {
+                // Show authentication waiting screen
+                if (isAuthenticating) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 60.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(20.dp)
+                    ) {
+                        Text(text = "🔐", fontSize = 72.sp)
+
                         Text(
-                            text = password.service,
-                            fontSize = 24.sp,
+                            text = "Authentication Required",
+                            fontSize = 22.sp,
                             fontWeight = FontWeight.Bold,
-                            color = SafeSphereColors.TextPrimary
+                            color = SafeSphereColors.TextPrimary,
+                            textAlign = TextAlign.Center
                         )
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            modifier = Modifier.padding(top = 4.dp)
+
+                        Text(
+                            text = "Complete biometric authentication\nto view password details",
+                            fontSize = 15.sp,
+                            color = SafeSphereColors.TextSecondary,
+                            textAlign = TextAlign.Center,
+                            lineHeight = 20.sp
+                        )
+
+                        Spacer(modifier = Modifier.height(8.dp))
+
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(12.dp))
+                                .background(SafeSphereColors.Primary.copy(alpha = 0.15f))
+                                .border(
+                                    width = 1.5.dp,
+                                    color = SafeSphereColors.Primary.copy(alpha = 0.3f),
+                                    shape = RoundedCornerShape(12.dp)
+                                )
+                                .padding(horizontal = 16.dp, vertical = 10.dp)
                         ) {
-                            Text(text = password.category.icon, fontSize = 16.sp)
-                            Spacer(modifier = Modifier.width(4.dp))
                             Text(
-                                text = password.category.displayName,
+                                text = "👆 Touch sensor to unlock",
                                 fontSize = 14.sp,
-                                color = SafeSphereColors.TextSecondary
+                                color = SafeSphereColors.Primary,
+                                fontWeight = FontWeight.Bold
                             )
                         }
                     }
-                }
+                } else if (!isAuthenticated) {
+                    // Authentication not yet completed (shouldn't normally show)
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 60.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(16.dp)
+                    ) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(48.dp),
+                            color = SafeSphereColors.Primary
+                        )
 
-                Spacer(modifier = Modifier.height(20.dp))
-
-                // Username
-                DetailRow(label = "Username", value = password.username, copyable = true)
-
-                Spacer(modifier = Modifier.height(12.dp))
-
-                // Password
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Column(modifier = Modifier.weight(1f)) {
                         Text(
-                            text = "Password",
-                            fontSize = 12.sp,
+                            text = "Initializing...",
+                            fontSize = 16.sp,
                             color = SafeSphereColors.TextSecondary
                         )
-                        Spacer(modifier = Modifier.height(4.dp))
-                        
-                        if (decryptedPassword == null && !isLoading) {
-                            TextButton(
-                                onClick = {
-                                    // Check if biometric authentication is required and available
-                                    if (isBiometricAvailable && requiresBiometric && !biometricAuthenticated) {
-                                        // Authenticate with biometrics
-                                        val activity = context as? androidx.fragment.app.FragmentActivity
-                                        if (activity != null) {
-                                            com.runanywhere.startup_hackathon20.security.BiometricAuthManager.authenticate(
-                                                activity = activity,
-                                                title = "Unlock Password",
-                                                subtitle = "Authenticate to view ${password.service} password",
-                                                negativeButtonText = "Cancel",
-                                                onSuccess = {
-                                                    biometricAuthenticated = true
-                                                    // Now decrypt the password
-                                                    isLoading = true
-                                                    scope.launch {
-                                                        try {
-                                                            val result = repository.getDecryptedPassword(password.id)
-                                                            result.onSuccess { decrypted ->
-                                                                decryptedPassword = decrypted.password
-                                                            }
-                                                        } catch (e: Exception) {
-                                                            Toast.makeText(
-                                                                context,
-                                                                "Failed to decrypt: ${e.message}",
-                                                                Toast.LENGTH_SHORT
-                                                            ).show()
-                                                        } finally {
-                                                            isLoading = false
-                                                        }
-                                                    }
-                                                },
-                                                onError = { errorCode, errorMessage ->
-                                                    Toast.makeText(
-                                                        context,
-                                                        "Authentication failed: $errorMessage",
-                                                        Toast.LENGTH_SHORT
-                                                    ).show()
-                                                },
-                                                onFailed = {
-                                                    Toast.makeText(
-                                                        context,
-                                                        "Authentication failed. Please try again.",
-                                                        Toast.LENGTH_SHORT
-                                                    ).show()
-                                                }
-                                            )
-                                        }
-                                    } else {
-                                        // No biometric or already authenticated, decrypt directly
-                                        isLoading = true
-                                        scope.launch {
-                                            try {
-                                                val result = repository.getDecryptedPassword(password.id)
-                                                result.onSuccess { decrypted ->
-                                                    decryptedPassword = decrypted.password
-                                                }
-                                            } catch (e: Exception) {
-                                                Toast.makeText(
-                                                    context,
-                                                    "Failed to decrypt: ${e.message}",
-                                                    Toast.LENGTH_SHORT
-                                                ).show()
-                                            } finally {
-                                                isLoading = false
-                                            }
-                                        }
-                                    }
-                                }
-                            ) {
+                    }
+                } else {
+                    // AUTHENTICATED - Show ENTIRE password card details
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .verticalScroll(rememberScrollState())
+                    ) {
+                        // Header with authentication badge
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.Top
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = password.service,
+                                    fontSize = 24.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = SafeSphereColors.TextPrimary
+                                )
                                 Row(
                                     verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                    modifier = Modifier.padding(top = 4.dp)
                                 ) {
-                                    Text(if (isBiometricAvailable && requiresBiometric) "🔐" else "🔓")
+                                    Text(text = password.category.icon, fontSize = 16.sp)
+                                    Spacer(modifier = Modifier.width(4.dp))
                                     Text(
-                                        if (isBiometricAvailable && requiresBiometric) "Unlock with Biometric"
-                                        else "Reveal Password"
+                                        text = password.category.displayName,
+                                        fontSize = 14.sp,
+                                        color = SafeSphereColors.TextSecondary
                                     )
                                 }
                             }
-                        } else if (isLoading) {
-                            CircularProgressIndicator(
-                                modifier = Modifier.size(24.dp),
-                                color = SafeSphereColors.Primary
-                            )
-                        } else {
-                            Text(
-                                text = if (passwordVisible) decryptedPassword ?: "••••••••" 
-                                    else "••••••••",
-                                fontSize = 16.sp,
-                                color = SafeSphereColors.TextPrimary,
-                                fontWeight = FontWeight.Medium
-                            )
-                        }
-                    }
 
-                    if (decryptedPassword != null) {
-                        Row {
-                            IconButton(onClick = { passwordVisible = !passwordVisible }) {
-                                Text(
-                                    text = if (passwordVisible) "👁" else "🔒",
-                                    fontSize = 20.sp
-                                )
-                            }
-                            IconButton(
-                                onClick = {
-                                    val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) 
-                                        as ClipboardManager
-                                    val clip = ClipData.newPlainText("password", decryptedPassword)
-                                    clipboard.setPrimaryClip(clip)
-                                    Toast.makeText(context, "Copied to clipboard", Toast.LENGTH_SHORT).show()
-                                }
+                            // Authenticated indicator
+                            Box(
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(10.dp))
+                                    .background(Color(0xFF4CAF50).copy(alpha = 0.25f))
+                                    .border(
+                                        width = 1.5.dp,
+                                        color = Color(0xFF4CAF50),
+                                        shape = RoundedCornerShape(10.dp)
+                                    )
+                                    .padding(horizontal = 10.dp, vertical = 6.dp)
                             ) {
                                 Text(
-                                    text = "📋",
-                                    fontSize = 20.sp
+                                    text = "✓ Unlocked",
+                                    fontSize = 12.sp,
+                                    color = Color(0xFF2E7D32),
+                                    fontWeight = FontWeight.Bold
                                 )
                             }
                         }
-                    }
-                }
 
-                // Biometric status indicator
-                if (isBiometricAvailable && decryptedPassword == null) {
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(4.dp)
-                    ) {
-                        Text(text = "🔐", fontSize = 12.sp)
+                        Spacer(modifier = Modifier.height(24.dp))
+
+                        // Username
+                        DetailRow(label = "Username", value = password.username, copyable = true)
+
+                        Spacer(modifier = Modifier.height(16.dp))
+
+                        // Password (with show/hide)
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = "Password",
+                                    fontSize = 13.sp,
+                                    color = SafeSphereColors.TextSecondary,
+                                    fontWeight = FontWeight.Medium
+                                )
+                                Spacer(modifier = Modifier.height(6.dp))
+
+                                if (isLoading) {
+                                    CircularProgressIndicator(
+                                        modifier = Modifier.size(24.dp),
+                                        color = SafeSphereColors.Primary
+                                    )
+                                } else {
+                                    Text(
+                                        text = if (passwordVisible) decryptedPassword ?: "••••••••"
+                                        else "••••••••",
+                                        fontSize = 17.sp,
+                                        color = SafeSphereColors.TextPrimary,
+                                        fontWeight = FontWeight.SemiBold,
+                                        letterSpacing = if (!passwordVisible) 2.sp else 0.sp
+                                    )
+                                }
+                            }
+
+                            if (decryptedPassword != null) {
+                                Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                                    IconButton(onClick = { passwordVisible = !passwordVisible }) {
+                                        Text(
+                                            text = if (passwordVisible) "👁" else "🔒",
+                                            fontSize = 22.sp
+                                        )
+                                    }
+                                    IconButton(
+                                        onClick = {
+                                            val clipboard =
+                                                context.getSystemService(Context.CLIPBOARD_SERVICE)
+                                                        as ClipboardManager
+                                            val clip =
+                                                ClipData.newPlainText("password", decryptedPassword)
+                                            clipboard.setPrimaryClip(clip)
+                                            Toast.makeText(
+                                                context,
+                                                "Password copied to clipboard",
+                                                Toast.LENGTH_SHORT
+                                            ).show()
+                                        }
+                                    ) {
+                                        Text(text = "📋", fontSize = 22.sp)
+                                    }
+                                }
+                            }
+                        }
+
+                        // Password strength indicator
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .height(6.dp)
+                                    .width(100.dp)
+                                    .clip(RoundedCornerShape(3.dp))
+                                    .background(SafeSphereColors.SurfaceVariant)
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxHeight()
+                                        .fillMaxWidth(password.strengthScore / 100f)
+                                        .background(
+                                            when {
+                                                password.strengthScore >= 75 -> Color(0xFF4CAF50)
+                                                password.strengthScore >= 50 -> Color(0xFFFBC02D)
+                                                else -> Color(0xFFF44336)
+                                            }
+                                        )
+                                )
+                            }
+
+                            Text(
+                                text = when {
+                                    password.strengthScore >= 75 -> "Strong"
+                                    password.strengthScore >= 50 -> "Medium"
+                                    else -> "Weak"
+                                },
+                                fontSize = 12.sp,
+                                color = when {
+                                    password.strengthScore >= 75 -> Color(0xFF4CAF50)
+                                    password.strengthScore >= 50 -> Color(0xFFFBC02D)
+                                    else -> Color(0xFFF44336)
+                                },
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+
+                        if (password.url.isNotBlank()) {
+                            Spacer(modifier = Modifier.height(16.dp))
+                            DetailRow(
+                                label = "Website",
+                                value = password.url,
+                                copyable = true,
+                                isUrl = true
+                            )
+                        }
+
+                        if (password.notes.isNotBlank()) {
+                            Spacer(modifier = Modifier.height(16.dp))
+                            Column {
+                                Text(
+                                    text = "Notes",
+                                    fontSize = 13.sp,
+                                    color = SafeSphereColors.TextSecondary,
+                                    fontWeight = FontWeight.Medium
+                                )
+                                Spacer(modifier = Modifier.height(6.dp))
+                                Text(
+                                    text = password.notes,
+                                    fontSize = 14.sp,
+                                    color = SafeSphereColors.TextPrimary,
+                                    lineHeight = 20.sp
+                                )
+                            }
+                        }
+
+                        // Created date
+                        Spacer(modifier = Modifier.height(16.dp))
                         Text(
-                            text = "Biometric authentication required",
-                            fontSize = 11.sp,
-                            color = SafeSphereColors.Primary,
-                            fontWeight = FontWeight.Medium
-                        )
-                    }
-                } else if (!isBiometricAvailable && decryptedPassword == null) {
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Text(
-                        text = "ℹ️ Biometric not available on this device",
-                        fontSize = 11.sp,
-                        color = SafeSphereColors.TextSecondary
-                    )
-                }
-
-                if (password.url.isNotBlank()) {
-                    Spacer(modifier = Modifier.height(12.dp))
-                    DetailRow(label = "URL", value = password.url, copyable = true, isUrl = true)
-                }
-
-                if (password.notes.isNotBlank()) {
-                    Spacer(modifier = Modifier.height(12.dp))
-                    Column {
-                        Text(
-                            text = "Notes",
+                            text = "Created: ${
+                                java.text.SimpleDateFormat(
+                                    "MMM dd, yyyy",
+                                    java.util.Locale.getDefault()
+                                ).format(password.createdAt)
+                            }",
                             fontSize = 12.sp,
                             color = SafeSphereColors.TextSecondary
                         )
-                        Spacer(modifier = Modifier.height(4.dp))
-                        Text(
-                            text = password.notes,
-                            fontSize = 14.sp,
-                            color = SafeSphereColors.TextPrimary
-                        )
+
+                        Spacer(modifier = Modifier.height(24.dp))
+
+                        // Delete and Close buttons
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(12.dp)
+                        ) {
+                            GlassButton(
+                                text = "Delete",
+                                onClick = {
+                                    scope.launch {
+                                        repository.deletePassword(password.id)
+                                        Toast.makeText(
+                                            context,
+                                            "Password deleted",
+                                            Toast.LENGTH_SHORT
+                                        ).show()
+                                        onDismiss()
+                                    }
+                                },
+                                modifier = Modifier.weight(1f)
+                            )
+
+                            GlassButton(
+                                text = "Close",
+                                onClick = onDismiss,
+                                primary = true,
+                                modifier = Modifier.weight(1f)
+                            )
+                        }
                     }
-                }
-
-                Spacer(modifier = Modifier.height(20.dp))
-
-                // Delete and Close buttons
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    GlassButton(
-                        text = "Delete",
-                        onClick = {
-                            scope.launch {
-                                repository.deletePassword(password.id)
-                                Toast.makeText(context, "Password deleted", Toast.LENGTH_SHORT).show()
-                                onDismiss()
-                            }
-                        },
-                        modifier = Modifier.weight(1f)
-                    )
-
-                    GlassButton(
-                        text = "Close",
-                        onClick = onDismiss,
-                        primary = true,
-                        modifier = Modifier.weight(1f)
-                    )
                 }
             }
         }

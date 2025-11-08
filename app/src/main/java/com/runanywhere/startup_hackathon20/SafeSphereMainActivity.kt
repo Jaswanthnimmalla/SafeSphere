@@ -1423,29 +1423,30 @@ fun PasswordManagerQuickAccessCard(
             horizontalAlignment = Alignment.Start,
             verticalArrangement = Arrangement.Center
         ) {
-            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                Column {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text(
-                            text = "🗝️",
-                            fontSize = 32.sp,
-                            modifier = Modifier.padding(end = 8.dp)
-                        )
-                        Text(
-                            text = "Password Manager",
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 18.sp,
-                            color = SafeSphereColors.TextPrimary
-                        )
-                    }
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        text = "🗝️",
+                        fontSize = 32.sp,
+                        modifier = Modifier.padding(end = 8.dp)
+                    )
+                    Text(
+                        text = "Password Manager",
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 18.sp,
+                        color = SafeSphereColors.TextPrimary
+                    )
                 }
-                // View All button
+
+                // View All button with proper sizing
                 GlassButton(
                     text = "View All",
                     onClick = onViewAllClick,
-                    modifier = Modifier
-                        .height(34.dp)
-                        .align(Alignment.CenterVertically),
+                    modifier = Modifier.wrapContentWidth(),
                     primary = true
                 )
             }
@@ -1467,19 +1468,24 @@ fun PasswordManagerQuickAccessCard(
                 // Autofill Status
                 Box(
                     modifier = Modifier
-                        .clip(RoundedCornerShape(8.dp))
+                        .clip(RoundedCornerShape(10.dp))
                         .background(
-                            if (isAutofillEnabled) SafeSphereColors.Success.copy(alpha = 0.18f)
-                            else SafeSphereColors.Warning.copy(alpha = 0.18f)
+                            if (isAutofillEnabled) Color(0xFF4CAF50).copy(alpha = 0.25f)
+                            else Color(0xFFFF9800).copy(alpha = 0.25f)
                         )
-                        .padding(horizontal = 10.dp, vertical = 4.dp)
+                        .border(
+                            width = 1.5.dp,
+                            color = if (isAutofillEnabled) Color(0xFF4CAF50) else Color(0xFFFF9800),
+                            shape = RoundedCornerShape(10.dp)
+                        )
+                        .padding(horizontal = 12.dp, vertical = 6.dp)
                 ) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Text(
-                            text = if (isAutofillEnabled) "Autofill: ON" else "Autofill: OFF",
-                            fontWeight = FontWeight.Medium,
-                            color = if (isAutofillEnabled) SafeSphereColors.Success else SafeSphereColors.Warning,
-                            fontSize = 13.sp,
+                            text = if (isAutofillEnabled) "✅ Autofill: ON" else "⚠️ Autofill: OFF",
+                            fontWeight = FontWeight.Bold,
+                            color = if (isAutofillEnabled) Color(0xFF2E7D32) else Color(0xFFE65100),
+                            fontSize = 14.sp,
                         )
                         if (!isAutofillEnabled) {
                             // Add enable autofill quick action
@@ -1490,7 +1496,7 @@ fun PasswordManagerQuickAccessCard(
                                 Text(
                                     text = "Enable",
                                     color = SafeSphereColors.Primary,
-                                    fontSize = 13.sp,
+                                    fontSize = 14.sp,
                                     fontWeight = FontWeight.Bold,
                                     modifier = Modifier.padding(start = 4.dp)
                                 )
@@ -1499,21 +1505,16 @@ fun PasswordManagerQuickAccessCard(
                     }
                 }
             }
-            
-            Spacer(modifier = Modifier.height(6.dp))
 
-            Row(
-                horizontalArrangement = Arrangement.Start,
-                verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                GlassButton(
-                    text = "Add Password",
-                    onClick = onAddPasswordClick,
-                    modifier = Modifier.height(34.dp),
-                    primary = false
-                )
-            }
+            Spacer(modifier = Modifier.height(10.dp))
+
+            // Add Password button with proper sizing
+            GlassButton(
+                text = "Add Password",
+                onClick = onAddPasswordClick,
+                modifier = Modifier.wrapContentWidth(),
+                primary = false
+            )
         }
     }
 }

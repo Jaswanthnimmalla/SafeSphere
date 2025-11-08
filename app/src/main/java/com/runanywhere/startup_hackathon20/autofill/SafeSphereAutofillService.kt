@@ -729,76 +729,271 @@ class SafeSphereAutofillService : AutofillService() {
     ): Boolean {
         val query = searchQuery.lowercase()
 
-        // Match by service name (exact or partial)
-        if (password.service.lowercase().contains(query) || 
-            query.contains(password.service.lowercase())) {
-            Log.d(TAG, "   ✅ Matched by service name: ${password.service}")
-            return true
-        }
+        Log.d(TAG, "   🔍 Checking password: ${password.service}")
+        Log.d(TAG, "      Saved URL: '${password.url}'")
+        Log.d(TAG, "      Search Query: '$query'")
+        Log.d(TAG, "      Current URL: '$url'")
+        Log.d(TAG, "      Package: '$packageName'")
 
-        // Match by URL domain (ignore paths, subdomains, protocols)
+        // ==================== STRATEGY 1: EXACT DOMAIN MATCH ====================
+        // This is the most reliable for browser-based credentials
         if (url != null && password.url.isNotBlank()) {
             val currentDomain = extractDomain(url)
             val savedDomain = extractDomain(password.url)
 
-            Log.d(TAG, "   🔍 Comparing domains: '$currentDomain' vs '$savedDomain'")
+            Log.d(TAG, "      [Domain Match] Comparing: '$currentDomain' vs '$savedDomain'")
 
             if (currentDomain.isNotBlank() && savedDomain.isNotBlank()) {
-                // Direct exact match
+                // Exact match
                 if (currentDomain.equals(savedDomain, ignoreCase = true)) {
-                    Log.d(TAG, "   ✅ Matched by exact domain: $currentDomain")
+                    Log.d(TAG, "   ✅ MATCHED by exact domain: $currentDomain")
                     return true
                 }
 
-                // One contains the other (e.g., twitter.com and x.com are both Twitter)
-                if (currentDomain.contains(savedDomain, ignoreCase = true) ||
-                    savedDomain.contains(currentDomain, ignoreCase = true)
-                ) {
-                    Log.d(TAG, "   ✅ Matched by domain contains")
+                // Subdomain match (e.g., mobile.twitter.com matches twitter.com)
+                if (currentDomain.endsWith(".$savedDomain") || savedDomain.endsWith(".$currentDomain")) {
+                    Log.d(TAG, "   ✅ MATCHED by subdomain")
                     return true
                 }
 
-                // Special case: twitter.com and x.com are the same
-                if ((currentDomain == "twitter.com" && savedDomain == "x.com") ||
-                    (currentDomain == "x.com" && savedDomain == "twitter.com")
+                // Remove TLD and compare base names
+                val currentBase = currentDomain.substringBeforeLast(".")
+                val savedBase = savedDomain.substringBeforeLast(".")
+
+                if (currentBase.isNotBlank() && savedBase.isNotBlank() &&
+                    currentBase.equals(savedBase, ignoreCase = true)
                 ) {
-                    Log.d(TAG, "   ✅ Matched by Twitter/X alias")
+                    Log.d(TAG, "   ✅ MATCHED by base domain name: $currentBase")
                     return true
                 }
 
-                // Match by just the site name part (before TLD)
-                val currentName = currentDomain.substringBeforeLast(".")
-                val savedName = savedDomain.substringBeforeLast(".")
-                if (currentName.equals(savedName, ignoreCase = true) &&
-                    currentName.isNotBlank()
+                // Special case: twitter.com ↔ x.com
+                if ((currentDomain.contains("twitter") && savedDomain.contains("x.com")) ||
+                    (currentDomain.contains("x.com") && savedDomain.contains("twitter"))
                 ) {
-                    Log.d(TAG, "   ✅ Matched by domain name: $currentName")
+                    Log.d(TAG, "   ✅ MATCHED by Twitter/X alias")
                     return true
                 }
             }
         }
-        
-        // Match by package name keywords
-        val packageParts = packageName.split(".")
-        val matched = packageParts.any { part ->
-            if (part.length > 3) { // Ignore short parts like "com", "org", "app"
-                password.service.lowercase().contains(part.lowercase()) ||
-                        password.url.lowercase().contains(part.lowercase())
-            } else {
-                false
+
+        // ==================== STRATEGY 2: SERVICE NAME MATCH ====================
+        // Match by service name (exact or partial)
+        if (password.service.lowercase().contains(query)) {
+            Log.d(TAG, "   ✅ MATCHED by service contains query: ${password.service}")
+            return true
+        }
+
+        if (query.contains(password.service.lowercase())) {
+            Log.d(TAG, "   ✅ MATCHED by query contains service: ${password.service}")
+            return true
+        }
+
+        // Word-by-word matching
+        val serviceWords = password.service.lowercase().split(" ", "-", "_", ".")
+        val queryWords = query.split(" ", "-", "_", ".")
+
+        for (serviceWord in serviceWords) {
+            for (queryWord in queryWords) {
+                if (serviceWord.length > 2 && queryWord.length > 2) {
+                    if (serviceWord.contains(queryWord) || queryWord.contains(serviceWord)) {
+                        Log.d(
+                            TAG,
+                            "   ✅ MATCHED by service/query word: '$serviceWord' ~ '$queryWord'"
+                        )
+                        return true
+                    }
+                }
             }
         }
 
-        if (matched) {
-            Log.d(TAG, "   ✅ Matched by package name part")
-        } else {
+        // ==================== STRATEGY 3: URL FUZZY MATCH ====================
+        // More aggressive URL matching for cases where domain extraction fails
+        if (url != null && password.url.isNotBlank()) {
+            val normalizedCurrentUrl = normalizeUrl(url)
+            val normalizedSavedUrl = normalizeUrl(password.url)
+
             Log.d(
                 TAG,
-                "   ❌ No match - Service: '${password.service}', URL: '${password.url}', Query: '$query', CurrentURL: '$url'"
+                "      [URL Fuzzy] Comparing: '$normalizedCurrentUrl' vs '$normalizedSavedUrl'"
             )
+
+            // Direct substring match
+            if (normalizedCurrentUrl.contains(normalizedSavedUrl) ||
+                normalizedSavedUrl.contains(normalizedCurrentUrl)
+            ) {
+                Log.d(TAG, "   ✅ MATCHED by URL substring")
+                return true
+            }
+
+            // Extract all meaningful words from URLs
+            val currentUrlWords = extractMeaningfulWords(normalizedCurrentUrl)
+            val savedUrlWords = extractMeaningfulWords(normalizedSavedUrl)
+
+            // Check if any significant word matches
+            for (currentWord in currentUrlWords) {
+                for (savedWord in savedUrlWords) {
+                    if (currentWord.length > 3 && savedWord.length > 3) {
+                        if (currentWord == savedWord ||
+                            currentWord.contains(savedWord) ||
+                            savedWord.contains(currentWord)
+                        ) {
+                            Log.d(TAG, "   ✅ MATCHED by URL word: '$currentWord' ~ '$savedWord'")
+                            return true
+                        }
+                    }
+                }
+            }
         }
 
-        return matched
+        // ==================== STRATEGY 4: PACKAGE NAME MATCH ====================
+        // Match by package name - useful for native apps
+        val packageParts = packageName.lowercase().split(".")
+
+        // Check if saved URL or service contains any significant package part
+        for (part in packageParts) {
+            if (part.length > 3 && part !in listOf(
+                    "com", "org", "app", "net", "www", "mobile", "android", "io", "co"
+                )
+            ) {
+
+                // Check in service name
+                if (password.service.lowercase().contains(part)) {
+                    Log.d(TAG, "   ✅ MATCHED by package part in service: '$part'")
+                    return true
+                }
+
+                // Check in URL
+                if (password.url.lowercase().contains(part)) {
+                    Log.d(TAG, "   ✅ MATCHED by package part in URL: '$part'")
+                    return true
+                }
+
+                // Check if package part is similar to service words
+                for (serviceWord in serviceWords) {
+                    if (serviceWord.length > 3) {
+                        // Calculate similarity
+                        if (calculateSimilarity(part, serviceWord) > 0.7) {
+                            Log.d(
+                                TAG,
+                                "   ✅ MATCHED by package/service similarity: '$part' ~ '$serviceWord'"
+                            )
+                            return true
+                        }
+                    }
+                }
+            }
+        }
+
+        // ==================== STRATEGY 5: PACKAGE IN URL ====================
+        // Check if package name is stored in URL field (common for native app saves)
+        if (password.url.contains(packageName, ignoreCase = true)) {
+            Log.d(TAG, "   ✅ MATCHED by full package in URL")
+            return true
+        }
+
+        // Reverse: check if saved URL is the package
+        if (packageName.contains(password.url, ignoreCase = true) && password.url.length > 5) {
+            Log.d(TAG, "   ✅ MATCHED by URL is package substring")
+            return true
+        }
+
+        // ==================== STRATEGY 6: SERVICE NAME IN URL/PACKAGE ====================
+        // Check if service name appears in current URL or package
+        if (password.service.length > 3) {
+            val serviceClean = password.service.lowercase()
+                .replace(" ", "")
+                .replace("-", "")
+                .replace("_", "")
+
+            val urlClean = (url ?: "").lowercase()
+                .replace(" ", "")
+                .replace("-", "")
+                .replace("_", "")
+                .replace(".", "")
+
+            val packageClean = packageName.lowercase()
+                .replace(".", "")
+
+            if (serviceClean.length > 3) {
+                if (urlClean.contains(serviceClean) || serviceClean.contains(urlClean.takeIf { it.length > 3 }
+                        ?: "")) {
+                    Log.d(TAG, "   ✅ MATCHED by service in URL (cleaned)")
+                    return true
+                }
+
+                if (packageClean.contains(serviceClean) || serviceClean.contains(packageClean.takeIf { it.length > 3 }
+                        ?: "")) {
+                    Log.d(TAG, "   ✅ MATCHED by service in package (cleaned)")
+                    return true
+                }
+            }
+        }
+
+        Log.d(TAG, "   ❌ No match found")
+        return false
+    }
+
+    /**
+     * Normalize URL for comparison - remove protocol, www, trailing slashes, etc.
+     */
+    private fun normalizeUrl(url: String): String {
+        return url.lowercase()
+            .trim()
+            .replace("https://", "")
+            .replace("http://", "")
+            .replace("www.", "")
+            .replace(Regex("/.*$"), "") // Remove everything after first slash
+            .replace(Regex(":\\d+"), "") // Remove port
+            .replace(Regex("[?#].*$"), "") // Remove query and fragment
+    }
+
+    /**
+     * Extract meaningful words from URL or package name
+     */
+    private fun extractMeaningfulWords(text: String): List<String> {
+        val stopWords = setOf(
+            "com",
+            "org",
+            "www",
+            "app",
+            "net",
+            "co",
+            "io",
+            "mobile",
+            "android",
+            "https",
+            "http"
+        )
+
+        return text.lowercase()
+            .split(".", "/", "-", "_", ":")
+            .filter { it.length > 2 && it !in stopWords }
+            .distinct()
+    }
+
+    /**
+     * Calculate string similarity (Levenshtein-based)
+     */
+    private fun calculateSimilarity(s1: String, s2: String): Double {
+        if (s1 == s2) return 1.0
+        if (s1.isEmpty() || s2.isEmpty()) return 0.0
+
+        val longer = if (s1.length > s2.length) s1 else s2
+        val shorter = if (s1.length > s2.length) s2 else s1
+
+        // Simple substring check
+        if (longer.contains(shorter)) {
+            return shorter.length.toDouble() / longer.length.toDouble()
+        }
+
+        // Count matching characters
+        var matches = 0
+        for (c in shorter) {
+            if (longer.contains(c)) matches++
+        }
+
+        return matches.toDouble() / longer.length.toDouble()
     }
 
     /**
@@ -885,34 +1080,87 @@ class SafeSphereAutofillService : AutofillService() {
     private fun extractDomain(url: String): String {
         return try {
             var domain = url
+                .trim()
                 .replace("https://", "")
                 .replace("http://", "")
-                .replace("www.", "") // Remove www at any position
-                .substringBefore("/") // Remove path
-                .substringBefore(":") // Remove port
-                .substringBefore("?") // Remove query params
+                .lowercase()
+            
+            // Remove www at any position early
+            domain = domain.replace("www.", "")
+            
+            // Remove path, query, fragment, port
+            domain = domain
+                .substringBefore("/")
+                .substringBefore(":")
+                .substringBefore("?")
+                .substringBefore("#")
                 .trim()
 
-            // Remove www from start if present
-            if (domain.startsWith("www.")) {
-                domain = domain.substring(4)
+            // Handle package names (e.g., com.twitter.android)
+            if (domain.contains(".") && !domain.contains(" ")) {
+                val parts = domain.split(".")
+                
+                // If it looks like a package name (e.g., com.twitter.android)
+                // Return the base domain instead
+                if (parts.size >= 3 && parts[0] in listOf("com", "org", "net", "app", "io", "co")) {
+                    // For reverse domain notation (package names), extract meaningful part
+                    // com.twitter.android -> twitter
+                    val meaningfulPart = parts[1]
+                    if (meaningfulPart.length > 2 && meaningfulPart !in listOf(
+                            "app",
+                            "mobile",
+                            "www"
+                        )
+                    ) {
+                        Log.d(
+                            TAG,
+                            "      [extractDomain] Package format detected: '$url' -> '$meaningfulPart'"
+                        )
+                        return meaningfulPart
+                    }
+                }
+
+                // For normal domains (e.g., mobile.twitter.com)
+                // Return base domain (last 2 parts)
+                if (parts.size >= 2) {
+                    // Handle cases like co.uk, com.au, etc.
+                    val lastPart = parts.last()
+                    val secondLastPart = parts[parts.size - 2]
+
+                    // Check if it's a two-part TLD (co.uk, com.au, etc.)
+                    if (lastPart.length == 2 && secondLastPart in listOf(
+                            "co",
+                            "com",
+                            "gov",
+                            "org",
+                            "net",
+                            "ac",
+                            "edu"
+                        )
+                    ) {
+                        // Take last 3 parts (e.g., bbc.co.uk)
+                        if (parts.size >= 3) {
+                            val baseDomain = parts.takeLast(3).joinToString(".")
+                            Log.d(
+                                TAG,
+                                "      [extractDomain] Two-part TLD detected: '$url' -> '$baseDomain'"
+                            )
+                            return baseDomain
+                        }
+                    }
+
+                    // Normal case: take last 2 parts (domain + TLD)
+                    val baseDomain = parts.takeLast(2).joinToString(".")
+                    Log.d(TAG, "      [extractDomain] Normal domain: '$url' -> '$baseDomain'")
+                    return baseDomain
+                }
             }
 
-            // Get just the main domain (e.g., google.com from accounts.google.com)
-            // For most cases, keep the full subdomain but also extract base
-            val parts = domain.split(".")
-
-            // Return the base domain (last 2 parts) for better matching
-            // e.g., x.com from mobile.x.com or twitter.com from mobile.twitter.com
-            if (parts.size > 2) {
-                // Keep the last 2 parts (domain + TLD)
-                domain = parts.takeLast(2).joinToString(".")
-            }
-
-            domain.lowercase()
+            Log.d(TAG, "      [extractDomain] Using as-is: '$url' -> '$domain'")
+            domain
         } catch (e: Exception) {
-            Log.e(TAG, "Error extracting domain from: $url", e)
-            url.lowercase()
+            Log.e(TAG, "      [extractDomain] Error extracting domain from: $url", e)
+            url.lowercase().trim()
         }
     }
 

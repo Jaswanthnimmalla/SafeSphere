@@ -61,31 +61,56 @@ fun GlassButton(
     enabled: Boolean = true
 ) {
     val backgroundColor = if (primary) {
-        SafeSphereColors.Primary.copy(alpha = 0.8f)
+        // Vibrant gradient background for primary buttons
+        Brush.linearGradient(
+            colors = listOf(
+                SafeSphereColors.Primary,
+                SafeSphereColors.Primary.copy(alpha = 0.85f)
+            )
+        )
     } else {
-        SafeSphereColors.Surface.copy(alpha = 0.6f)
+        // Solid background for secondary buttons with better visibility
+        Brush.linearGradient(
+            colors = listOf(
+                SafeSphereColors.Surface.copy(alpha = 0.9f),
+                SafeSphereColors.SurfaceVariant.copy(alpha = 0.8f)
+            )
+        )
+    }
+
+    val borderColor = if (primary) {
+        SafeSphereColors.Primary.copy(alpha = 0.6f)
+    } else {
+        SafeSphereColors.Primary.copy(alpha = 0.3f)
+    }
+
+    val textColor = if (primary) {
+        Color.White
+    } else {
+        if (enabled) SafeSphereColors.Primary else SafeSphereColors.TextSecondary
     }
 
     Box(
         modifier = modifier
-            .height(52.dp)
-            .clip(RoundedCornerShape(12.dp))
+            .heightIn(min = 50.dp)
+            .clip(RoundedCornerShape(14.dp))
             .background(backgroundColor)
             .clickable(enabled = enabled, onClick = onClick)
             .border(
-                width = 1.dp,
-                color = if (primary) SafeSphereColors.Primary
-                else SafeSphereColors.TextSecondary.copy(alpha = 0.2f),
-                shape = RoundedCornerShape(12.dp)
-            ),
+                width = if (primary) 2.dp else 1.5.dp,
+                color = borderColor,
+                shape = RoundedCornerShape(14.dp)
+            )
+            .padding(horizontal = 20.dp, vertical = 12.dp),
         contentAlignment = Alignment.Center
     ) {
         Text(
             text = text,
             fontSize = 16.sp,
-            fontWeight = FontWeight.SemiBold,
-            color = if (enabled) SafeSphereColors.TextPrimary
-            else SafeSphereColors.TextSecondary
+            fontWeight = if (primary) FontWeight.Bold else FontWeight.SemiBold,
+            color = textColor,
+            letterSpacing = 0.3.sp,
+            maxLines = 1
         )
     }
 }
