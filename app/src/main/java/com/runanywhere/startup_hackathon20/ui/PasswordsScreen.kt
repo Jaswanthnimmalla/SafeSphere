@@ -12,6 +12,7 @@ import android.widget.Toast
 import androidx.compose.foundation.*
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -66,6 +67,8 @@ fun PasswordsScreen(viewModel: SafeSphereViewModel) {
     var showAddDialog by remember { mutableStateOf(false) }
     var selectedPassword by remember { mutableStateOf<PasswordVaultEntry?>(null) }
     var showAutofillInfo by remember { mutableStateOf(false) }
+    var sortBy by remember { mutableStateOf(SortOption.NAME_ASC) }
+    var showSortMenu by remember { mutableStateOf(false) }
 
     val isAutofillEnabled = remember {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
@@ -76,7 +79,7 @@ fun PasswordsScreen(viewModel: SafeSphereViewModel) {
         }
     }
 
-    val filteredPasswords = remember(savedPasswords, searchQuery, selectedCategory) {
+    val filteredPasswords = remember(savedPasswords, searchQuery, selectedCategory, sortBy) {
         var filtered = savedPasswords
 
         if (searchQuery.isNotBlank()) {
@@ -91,7 +94,14 @@ fun PasswordsScreen(viewModel: SafeSphereViewModel) {
             filtered = filtered.filter { it.category == selectedCategory }
         }
 
-        filtered
+        // Apply sorting
+        when (sortBy) {
+            SortOption.NAME_ASC -> filtered.sortedBy { it.service.lowercase() }
+            SortOption.NAME_DESC -> filtered.sortedByDescending { it.service.lowercase() }
+            SortOption.DATE_NEWEST -> filtered.sortedByDescending { it.createdAt }
+            SortOption.DATE_OLDEST -> filtered.sortedBy { it.createdAt }
+            SortOption.CATEGORY -> filtered.sortedBy { it.category.displayName }
+        }
     }
 
     Box(modifier = Modifier.fillMaxSize()) {
@@ -104,73 +114,112 @@ fun PasswordsScreen(viewModel: SafeSphereViewModel) {
                 AutofillServiceBanner(onEnableClick = { showAutofillInfo = true })
             }
 
-            // Search Bar
-            GlassCard(
+            // Search Bar with Sort Button
+            Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 8.dp)
+                    .padding(horizontal = 16.dp, vertical = 8.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(12.dp),
-                    verticalAlignment = Alignment.CenterVertically
+                GlassCard(
+                    modifier = Modifier.weight(1f)
                 ) {
-                    Icon(
-                        imageVector = Icons.Filled.Search,
-                        contentDescription = "Search",
-                        tint = SafeSphereColors.TextSecondary,
-                        modifier = Modifier.size(20.dp)
-                    )
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(12.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            imageVector = Icons.Filled.Search,
+                            contentDescription = "Search",
+                            tint = SafeSphereColors.TextSecondary,
+                            modifier = Modifier.size(20.dp)
+                        )
 
-                    Spacer(modifier = Modifier.width(8.dp))
+                        Spacer(modifier = Modifier.width(8.dp))
 
-                    BasicTextField(
-                        value = searchQuery,
-                        onValueChange = { searchQuery = it },
-                        textStyle = TextStyle(
-                            color = SafeSphereColors.TextPrimary,
-                            fontSize = 16.sp
-                        ),
-                        cursorBrush = SolidColor(SafeSphereColors.Primary),
-                        decorationBox = { innerTextField ->
-                            Box(modifier = Modifier.weight(1f)) {
-                                if (searchQuery.isEmpty()) {
-                                    Text(
-                                        text = "Search passwords...",
-                                        fontSize = 16.sp,
-                                        color = SafeSphereColors.TextSecondary.copy(alpha = 0.5f)
-                                    )
+                        BasicTextField(
+                            value = searchQuery,
+                            onValueChange = { searchQuery = it },
+                            textStyle = TextStyle(
+                                color = SafeSphereColors.TextPrimary,
+                                fontSize = 16.sp
+                            ),
+                            cursorBrush = SolidColor(SafeSphereColors.Primary),
+                            decorationBox = { innerTextField ->
+                                Box(modifier = Modifier.weight(1f)) {
+                                    if (searchQuery.isEmpty()) {
+                                        Text(
+                                            text = "Search passwords...",
+                                            fontSize = 16.sp,
+                                            color = SafeSphereColors.TextSecondary.copy(alpha = 0.5f)
+                                        )
+                                    }
+                                    innerTextField()
                                 }
-                                innerTextField()
-                            }
-                        },
-                        modifier = Modifier.weight(1f)
-                    )
+                            },
+                            modifier = Modifier.weight(1f)
+                        )
 
-                    if (searchQuery.isNotEmpty()) {
-                        IconButton(
-                            onClick = { searchQuery = "" },
-                            modifier = Modifier.size(24.dp)
+                        if (searchQuery.isNotEmpty()) {
+                            IconButton(
+                                onClick = { searchQuery = "" },
+                                modifier = Modifier.size(24.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Filled.Close,
+                                    contentDescription = "Clear",
+                                    tint = SafeSphereColors.TextSecondary,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                            }
+                        }
+                    }
+                }
+
+                // Sort Button
+                Box {
+                    GlassCard(
+                        modifier = Modifier
+                            .clickable { showSortMenu = !showSortMenu }
+                            .padding(0.dp)
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(12.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(4.dp)
                         ) {
-                            Icon(
-                                imageVector = Icons.Filled.Close,
-                                contentDescription = "Clear",
-                                tint = SafeSphereColors.TextSecondary,
-                                modifier = Modifier.size(20.dp)
+                            Text(text = "⇅", fontSize = 20.sp)
+                            Text(
+                                text = "Sort",
+                                fontSize = 14.sp,
+                                color = SafeSphereColors.TextPrimary,
+                                fontWeight = FontWeight.Medium
                             )
                         }
+                    }
+
+                    if (showSortMenu) {
+                        SortMenu(
+                            currentSort = sortBy,
+                            onSortSelected = {
+                                sortBy = it
+                                showSortMenu = false
+                            },
+                            onDismiss = { showSortMenu = false }
+                        )
                     }
                 }
             }
 
-            // Category Filter
+            // Category Filter (Horizontal)
             CategoryFilterRow(
                 selectedCategory = selectedCategory,
                 onCategorySelected = { selectedCategory = if (selectedCategory == it) null else it }
             )
 
-            // Password Count
+            // Password Count & Info
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -179,9 +228,10 @@ fun PasswordsScreen(viewModel: SafeSphereViewModel) {
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                    text = "${filteredPasswords.size} passwords",
+                    text = "${filteredPasswords.size} password${if (filteredPasswords.size != 1) "s" else ""}",
                     fontSize = 14.sp,
-                    color = SafeSphereColors.TextSecondary
+                    fontWeight = FontWeight.SemiBold,
+                    color = SafeSphereColors.TextPrimary
                 )
 
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
@@ -266,6 +316,65 @@ fun PasswordsScreen(viewModel: SafeSphereViewModel) {
     }
 }
 
+/**
+ * Sort options enum
+ */
+enum class SortOption(val displayName: String) {
+    NAME_ASC("Name (A-Z)"),
+    NAME_DESC("Name (Z-A)"),
+    DATE_NEWEST("Newest First"),
+    DATE_OLDEST("Oldest First"),
+    CATEGORY("Category")
+}
+
+@Composable
+fun SortMenu(
+    currentSort: SortOption,
+    onSortSelected: (SortOption) -> Unit,
+    onDismiss: () -> Unit
+) {
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .clickable(
+                indication = null,
+                interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }
+            ) { onDismiss() }
+    ) {
+        GlassCard(
+            modifier = Modifier
+                .padding(top = 60.dp, end = 16.dp)
+                .align(Alignment.TopEnd)
+                .width(180.dp)
+        ) {
+            Column(modifier = Modifier.padding(8.dp)) {
+                SortOption.values().forEach { option ->
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { onSortSelected(option) }
+                            .padding(12.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Text(
+                            text = option.displayName,
+                            fontSize = 14.sp,
+                            color = if (currentSort == option) SafeSphereColors.Primary
+                            else SafeSphereColors.TextPrimary,
+                            fontWeight = if (currentSort == option) FontWeight.Bold
+                            else FontWeight.Normal
+                        )
+                        if (currentSort == option) {
+                            Text(text = "✓", fontSize = 16.sp, color = SafeSphereColors.Primary)
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
 @Composable
 fun AutofillServiceBanner(onEnableClick: () -> Unit) {
     GlassCard(
@@ -312,50 +421,71 @@ fun CategoryFilterRow(
     selectedCategory: PasswordCategory?,
     onCategorySelected: (PasswordCategory) -> Unit
 ) {
-    LazyColumn(
+    LazyRow(
         modifier = Modifier
             .fillMaxWidth()
             .padding(vertical = 8.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
         contentPadding = PaddingValues(horizontal = 16.dp)
     ) {
-        val categories = PasswordCategory.values()
+        // "All" category
+        item {
+            CategoryChip(
+                icon = "📁",
+                label = "All",
+                isSelected = selectedCategory == null,
+                onClick = { onCategorySelected(selectedCategory ?: PasswordCategory.OTHER) }
+            )
+        }
 
-        items(categories.size) { index ->
-            val category = categories[index]
-            val isSelected = selectedCategory == category
+        // All categories
+        items(PasswordCategory.values().size) { index ->
+            val category = PasswordCategory.values()[index]
+            CategoryChip(
+                icon = category.icon,
+                label = category.displayName,
+                isSelected = selectedCategory == category,
+                onClick = { onCategorySelected(category) }
+            )
+        }
+    }
+}
 
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(12.dp))
-                    .background(
-                        if (isSelected) SafeSphereColors.Primary.copy(alpha = 0.15f)
-                        else SafeSphereColors.Surface.copy(alpha = 0.6f)
-                    )
-                    .border(
-                        width = if (isSelected) 2.dp else 1.dp,
-                        color = if (isSelected) SafeSphereColors.Primary
-                        else SafeSphereColors.TextSecondary.copy(alpha = 0.2f),
-                        shape = RoundedCornerShape(12.dp)
-                    )
-                    .clickable { onCategorySelected(category) }
-                    .padding(horizontal = 16.dp, vertical = 12.dp)
-            ) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    Text(text = category.icon, fontSize = 18.sp)
-                    Text(
-                        text = category.displayName,
-                        fontSize = 14.sp,
-                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
-                        color = if (isSelected) SafeSphereColors.Primary
-                        else SafeSphereColors.TextPrimary
-                    )
-                }
-            }
+@Composable
+fun CategoryChip(
+    icon: String,
+    label: String,
+    isSelected: Boolean,
+    onClick: () -> Unit
+) {
+    Box(
+        modifier = Modifier
+            .clip(RoundedCornerShape(20.dp))
+            .background(
+                if (isSelected) SafeSphereColors.Primary.copy(alpha = 0.2f)
+                else SafeSphereColors.Surface.copy(alpha = 0.4f)
+            )
+            .border(
+                width = if (isSelected) 2.dp else 1.dp,
+                color = if (isSelected) SafeSphereColors.Primary
+                else SafeSphereColors.TextSecondary.copy(alpha = 0.2f),
+                shape = RoundedCornerShape(20.dp)
+            )
+            .clickable { onClick() }
+            .padding(horizontal = 16.dp, vertical = 10.dp)
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
+            Text(text = icon, fontSize = 16.sp)
+            Text(
+                text = label,
+                fontSize = 13.sp,
+                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
+                color = if (isSelected) SafeSphereColors.Primary
+                else SafeSphereColors.TextPrimary
+            )
         }
     }
 }
@@ -427,81 +557,142 @@ fun PasswordCard(
                 .padding(16.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
+            // Icon with category
             Box(
                 modifier = Modifier
-                    .size(48.dp)
-                    .clip(RoundedCornerShape(12.dp))
-                    .background(SafeSphereColors.Primary.copy(alpha = 0.2f)),
+                    .size(56.dp)
+                    .clip(RoundedCornerShape(16.dp))
+                    .background(
+                        when (password.category) {
+                            PasswordCategory.SOCIAL -> Color(0xFF1DA1F2).copy(alpha = 0.2f)
+                            PasswordCategory.EMAIL -> Color(0xFFEA4335).copy(alpha = 0.2f)
+                            PasswordCategory.BANKING -> Color(0xFF34A853).copy(alpha = 0.2f)
+                            PasswordCategory.SHOPPING -> Color(0xFFFBBC05).copy(alpha = 0.2f)
+                            PasswordCategory.ENTERTAINMENT -> Color(0xFFE91E63).copy(alpha = 0.2f)
+                            PasswordCategory.WORK -> Color(0xFF5E35B1).copy(alpha = 0.2f)
+                            PasswordCategory.WEB -> Color(0xFF00ACC1).copy(alpha = 0.2f)
+                            PasswordCategory.APP -> Color(0xFF43A047).copy(alpha = 0.2f)
+                            else -> SafeSphereColors.Primary.copy(alpha = 0.2f)
+                        }
+                    ),
                 contentAlignment = Alignment.Center
             ) {
-                Text(text = password.category.icon, fontSize = 24.sp)
+                Text(text = password.category.icon, fontSize = 28.sp)
             }
 
             Spacer(modifier = Modifier.width(16.dp))
 
+            // Password info
             Column(modifier = Modifier.weight(1f)) {
+                // Service name
                 Text(
                     text = password.service,
-                    fontSize = 16.sp,
-                    fontWeight = FontWeight.SemiBold,
-                    color = SafeSphereColors.TextPrimary
+                    fontSize = 17.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = SafeSphereColors.TextPrimary,
+                    maxLines = 1
                 )
 
+                Spacer(modifier = Modifier.height(4.dp))
+
+                // Username
                 Text(
                     text = password.username,
-                    fontSize = 13.sp,
-                    color = SafeSphereColors.TextSecondary
+                    fontSize = 14.sp,
+                    color = SafeSphereColors.TextSecondary,
+                    maxLines = 1
                 )
 
+                // URL if available
+                if (password.url.isNotBlank()) {
+                    Spacer(modifier = Modifier.height(2.dp))
+                    Text(
+                        text = "🌐 ${password.url.take(30)}${if (password.url.length > 30) "..." else ""}",
+                        fontSize = 11.sp,
+                        color = SafeSphereColors.TextSecondary.copy(alpha = 0.7f),
+                        maxLines = 1
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                // Strength bar and category badge
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(4.dp),
-                    modifier = Modifier.padding(top = 4.dp)
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    Box(
-                        modifier = Modifier
-                            .height(4.dp)
-                            .width(40.dp)
-                            .clip(RoundedCornerShape(2.dp))
-                            .background(SafeSphereColors.SurfaceVariant)
+                    // Strength indicator
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(4.dp)
                     ) {
                         Box(
                             modifier = Modifier
-                                .fillMaxHeight()
-                                .fillMaxWidth(password.strengthScore / 100f)
-                                .background(
-                                    when {
-                                        password.strengthScore >= 75 -> SafeSphereColors.Success
-                                        password.strengthScore >= 50 -> SafeSphereColors.Warning
-                                        else -> SafeSphereColors.Error
-                                    }
-                                )
+                                .height(4.dp)
+                                .width(50.dp)
+                                .clip(RoundedCornerShape(2.dp))
+                                .background(SafeSphereColors.SurfaceVariant)
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxHeight()
+                                    .fillMaxWidth(password.strengthScore / 100f)
+                                    .background(
+                                        when {
+                                            password.strengthScore >= 75 -> SafeSphereColors.Success
+                                            password.strengthScore >= 50 -> SafeSphereColors.Warning
+                                            else -> SafeSphereColors.Error
+                                        }
+                                    )
+                            )
+                        }
+
+                        Text(
+                            text = when {
+                                password.strengthScore >= 75 -> "Strong"
+                                password.strengthScore >= 50 -> "Medium"
+                                else -> "Weak"
+                            },
+                            fontSize = 11.sp,
+                            color = when {
+                                password.strengthScore >= 75 -> SafeSphereColors.Success
+                                password.strengthScore >= 50 -> SafeSphereColors.Warning
+                                else -> SafeSphereColors.Error
+                            },
+                            fontWeight = FontWeight.Bold
                         )
                     }
 
+                    // Dot separator
                     Text(
-                        text = when {
-                            password.strengthScore >= 75 -> "Strong"
-                            password.strengthScore >= 50 -> "Medium"
-                            else -> "Weak"
-                        },
+                        text = "•",
                         fontSize = 10.sp,
-                        color = when {
-                            password.strengthScore >= 75 -> SafeSphereColors.Success
-                            password.strengthScore >= 50 -> SafeSphereColors.Warning
-                            else -> SafeSphereColors.Error
-                        },
-                        fontWeight = FontWeight.SemiBold
+                        color = SafeSphereColors.TextSecondary.copy(alpha = 0.5f)
+                    )
+
+                    // Category badge
+                    Text(
+                        text = password.category.displayName,
+                        fontSize = 11.sp,
+                        color = SafeSphereColors.TextSecondary,
+                        fontWeight = FontWeight.Medium
                     )
                 }
             }
 
+            // Favorite star or chevron
             if (password.isFavorite) {
                 Icon(
                     imageVector = Icons.Filled.Star,
                     contentDescription = "Favorite",
                     tint = Color(0xFFFBC02D),
-                    modifier = Modifier.size(20.dp)
+                    modifier = Modifier.size(24.dp)
+                )
+            } else {
+                Text(
+                    text = "›",
+                    fontSize = 32.sp,
+                    color = SafeSphereColors.TextSecondary.copy(alpha = 0.3f)
                 )
             }
         }
