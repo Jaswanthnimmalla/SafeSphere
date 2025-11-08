@@ -758,6 +758,14 @@ fun ViewPasswordDialog(password: PasswordVaultEntry, onDismiss: () -> Unit) {
     var decryptedPassword by remember { mutableStateOf<String?>(null) }
     var isLoading by remember { mutableStateOf(false) }
     var passwordVisible by remember { mutableStateOf(false) }
+    var requiresBiometric by remember { mutableStateOf(true) }
+    var biometricAuthenticated by remember { mutableStateOf(false) }
+
+    // Check if biometric is available
+    val biometricAvailability = remember {
+        com.runanywhere.startup_hackathon20.security.BiometricAuthManager.isBiometricAvailable(context)
+    }
+    val isBiometricAvailable = biometricAvailability is com.runanywhere.startup_hackathon20.security.BiometricAvailability.Available
 
     Dialog(onDismissRequest = onDismiss) {
         GlassCard(
@@ -821,26 +829,85 @@ fun ViewPasswordDialog(password: PasswordVaultEntry, onDismiss: () -> Unit) {
                         if (decryptedPassword == null && !isLoading) {
                             TextButton(
                                 onClick = {
-                                    isLoading = true
-                                    scope.launch {
-                                        try {
-                                            val result = repository.getDecryptedPassword(password.id)
-                                            result.onSuccess { decrypted ->
-                                                decryptedPassword = decrypted.password
+                                    // Check if biometric authentication is required and available
+                                    if (isBiometricAvailable && requiresBiometric && !biometricAuthenticated) {
+                                        // Authenticate with biometrics
+                                        val activity = context as? androidx.fragment.app.FragmentActivity
+                                        if (activity != null) {
+                                            com.runanywhere.startup_hackathon20.security.BiometricAuthManager.authenticate(
+                                                activity = activity,
+                                                title = "Unlock Password",
+                                                subtitle = "Authenticate to view ${password.service} password",
+                                                negativeButtonText = "Cancel",
+                                                onSuccess = {
+                                                    biometricAuthenticated = true
+                                                    // Now decrypt the password
+                                                    isLoading = true
+                                                    scope.launch {
+                                                        try {
+                                                            val result = repository.getDecryptedPassword(password.id)
+                                                            result.onSuccess { decrypted ->
+                                                                decryptedPassword = decrypted.password
+                                                            }
+                                                        } catch (e: Exception) {
+                                                            Toast.makeText(
+                                                                context,
+                                                                "Failed to decrypt: ${e.message}",
+                                                                Toast.LENGTH_SHORT
+                                                            ).show()
+                                                        } finally {
+                                                            isLoading = false
+                                                        }
+                                                    }
+                                                },
+                                                onError = { errorCode, errorMessage ->
+                                                    Toast.makeText(
+                                                        context,
+                                                        "Authentication failed: $errorMessage",
+                                                        Toast.LENGTH_SHORT
+                                                    ).show()
+                                                },
+                                                onFailed = {
+                                                    Toast.makeText(
+                                                        context,
+                                                        "Authentication failed. Please try again.",
+                                                        Toast.LENGTH_SHORT
+                                                    ).show()
+                                                }
+                                            )
+                                        }
+                                    } else {
+                                        // No biometric or already authenticated, decrypt directly
+                                        isLoading = true
+                                        scope.launch {
+                                            try {
+                                                val result = repository.getDecryptedPassword(password.id)
+                                                result.onSuccess { decrypted ->
+                                                    decryptedPassword = decrypted.password
+                                                }
+                                            } catch (e: Exception) {
+                                                Toast.makeText(
+                                                    context,
+                                                    "Failed to decrypt: ${e.message}",
+                                                    Toast.LENGTH_SHORT
+                                                ).show()
+                                            } finally {
+                                                isLoading = false
                                             }
-                                        } catch (e: Exception) {
-                                            Toast.makeText(
-                                                context,
-                                                "Failed to decrypt: ${e.message}",
-                                                Toast.LENGTH_SHORT
-                                            ).show()
-                                        } finally {
-                                            isLoading = false
                                         }
                                     }
                                 }
                             ) {
-                                Text("🔓 Reveal Password")
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                ) {
+                                    Text(if (isBiometricAvailable && requiresBiometric) "🔐" else "🔓")
+                                    Text(
+                                        if (isBiometricAvailable && requiresBiometric) "Unlock with Biometric"
+                                        else "Reveal Password"
+                                    )
+                                }
                             }
                         } else if (isLoading) {
                             CircularProgressIndicator(
@@ -882,6 +949,30 @@ fun ViewPasswordDialog(password: PasswordVaultEntry, onDismiss: () -> Unit) {
                             }
                         }
                     }
+                }
+
+                // Biometric status indicator
+                if (isBiometricAvailable && decryptedPassword == null) {
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        Text(text = "🔐", fontSize = 12.sp)
+                        Text(
+                            text = "Biometric authentication required",
+                            fontSize = 11.sp,
+                            color = SafeSphereColors.Primary,
+                            fontWeight = FontWeight.Medium
+                        )
+                    }
+                } else if (!isBiometricAvailable && decryptedPassword == null) {
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        text = "ℹ️ Biometric not available on this device",
+                        fontSize = 11.sp,
+                        color = SafeSphereColors.TextSecondary
+                    )
                 }
 
                 if (password.url.isNotBlank()) {
