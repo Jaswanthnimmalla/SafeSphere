@@ -236,12 +236,14 @@ class SafeSphereAutofillService : AutofillService() {
         Log.d(TAG, "\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
         Log.d(TAG, "💾 SAVE REQUEST RECEIVED")
 
-        scope.launch {
+        scope.launch(Dispatchers.IO) {
             try {
                 val context = request.fillContexts.lastOrNull()
                 if (context == null) {
                     Log.d(TAG, "❌ No context available")
-                    callback.onSuccess()
+                    withContext(Dispatchers.Main) {
+                        callback.onSuccess()
+                    }
                     return@launch
                 }
 
@@ -258,29 +260,48 @@ class SafeSphereAutofillService : AutofillService() {
 
                 if (loginFields == null) {
                     Log.d(TAG, "❌ No login fields found")
-                    callback.onSuccess()
+                    withContext(Dispatchers.Main) {
+                        callback.onSuccess()
+                    }
                     return@launch
                 }
+
+                Log.d(TAG, "✅ Login fields identified:")
+                Log.d(TAG, "   👤 Username field: ${loginFields.usernameHint}")
+                Log.d(TAG, "   🔑 Password field: ${loginFields.passwordHint}")
 
                 // Extract credentials from the submitted form
                 val credentials = extractCredentialsFromDatasets(request, loginFields)
                 
                 if (credentials == null) {
-                    Log.d(TAG, "❌ Could not extract credentials")
-                    callback.onSuccess()
+                    Log.d(TAG, "❌ Could not extract credentials - skipping save")
+                    withContext(Dispatchers.Main) {
+                        callback.onSuccess()
+                    }
                     return@launch
                 }
 
-                Log.d(TAG, "✅ Credentials extracted:")
+                Log.d(TAG, "✅ Credentials extracted successfully:")
                 Log.d(TAG, "   👤 Username: ${credentials.username}")
                 Log.d(TAG, "   🔑 Password: ${credentials.password.take(3)}${"*".repeat(credentials.password.length - 3)}")
 
                 val url = parser.extractUrl()
-                val category = detectCategory(packageName)
+                Log.d(TAG, "🌐 Extracted URL: ${url ?: "none"}")
+
+                val category = try {
+                    detectCategory(packageName)
+                } catch (e: Exception) {
+                    Log.e(TAG, "Error detecting category, using default", e)
+                    PasswordCategory.OTHER
+                }
+                Log.d(TAG, "📁 Category: $category")
 
                 // Check if already saved
-                val existingPasswords = withContext(Dispatchers.IO) {
+                val existingPasswords = try {
                     repository.passwords.first()
+                } catch (e: Exception) {
+                    Log.e(TAG, "Error fetching existing passwords", e)
+                    emptyList()
                 }
                 
                 val alreadyExists = existingPasswords.any {
@@ -289,7 +310,7 @@ class SafeSphereAutofillService : AutofillService() {
                 }
 
                 if (alreadyExists) {
-                    Log.d(TAG, "ℹ️ Password already saved - updating")
+                    Log.d(TAG, "ℹ️ Password already exists - updating existing entry")
                     // Find and update existing
                     val existing = existingPasswords.find {
                         it.service.equals(appName, ignoreCase = true) && 
@@ -297,40 +318,59 @@ class SafeSphereAutofillService : AutofillService() {
                     }
                     
                     if (existing != null) {
-                        withContext(Dispatchers.IO) {
+                        try {
                             repository.updatePassword(
                                 id = existing.id,
                                 service = appName,
                                 username = credentials.username,
                                 password = credentials.password,
                                 url = url ?: packageName,
-                                notes = "",
+                                notes = "Auto-saved by SafeSphere",
                                 category = category
                             )
+                            Log.d(TAG, "✅ Password UPDATED successfully in SafeSphere vault!")
+                        } catch (e: Exception) {
+                            Log.e(TAG, "❌ Failed to update password", e)
                         }
                     }
                 } else {
                     // Save new password
-                    Log.d(TAG, "💾 Saving new password to SafeSphere vault")
-                    withContext(Dispatchers.IO) {
+                    Log.d(TAG, "💾 Saving NEW password to SafeSphere vault...")
+                    try {
                         repository.savePassword(
                             service = appName,
                             username = credentials.username,
                             password = credentials.password,
                             url = url ?: packageName,
-                            category = category
+                            category = category,
+                            notes = "Auto-saved by SafeSphere"
                         )
+                        Log.d(TAG, "✅ Password SAVED successfully to SafeSphere vault!")
+                        Log.d(TAG, "   📝 Service: $appName")
+                        Log.d(TAG, "   👤 Username: ${credentials.username}")
+                        Log.d(TAG, "   🌐 URL: ${url ?: packageName}")
+                        Log.d(TAG, "   📁 Category: $category")
+                    } catch (e: Exception) {
+                        Log.e(TAG, "❌ Failed to save password", e)
+                        Log.e(TAG, "   Error details: ${e.message}")
+                        e.printStackTrace()
                     }
                 }
 
-                Log.d(TAG, "✅ Password saved successfully to SafeSphere!")
                 Log.d(TAG, "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n")
-                
-                callback.onSuccess()
+
+                withContext(Dispatchers.Main) {
+                    callback.onSuccess()
+                }
 
             } catch (e: Exception) {
-                Log.e(TAG, "❌ Save request failed", e)
-                callback.onSuccess() // Don't fail the save
+                Log.e(TAG, "❌ Save request failed with exception", e)
+                Log.e(TAG, "   Exception type: ${e.javaClass.simpleName}")
+                Log.e(TAG, "   Message: ${e.message}")
+                e.printStackTrace()
+                withContext(Dispatchers.Main) {
+                    callback.onSuccess() // Don't fail the save
+                }
             }
         }
     }
@@ -500,20 +540,142 @@ class SafeSphereAutofillService : AutofillService() {
         request: SaveRequest,
         loginFields: LoginFields
     ): Credentials? {
+        Log.d(TAG, "🔍 Extracting credentials from save request...")
+
+        var username: String? = null
+        var password: String? = null
+
         // Try to get values from the structure
         for (context in request.fillContexts) {
             val structure = context.structure
-            
+
+            Log.d(TAG, "   📋 Checking context with ${structure.windowNodeCount} windows")
+
             for (i in 0 until structure.windowNodeCount) {
                 val windowNode = structure.getWindowNodeAt(i)
                 val credentials = extractFromNode(windowNode.rootViewNode, loginFields)
                 if (credentials != null) {
+                    Log.d(TAG, "   ✅ Found credentials from node!")
                     return credentials
                 }
             }
         }
-        
+
+        // If we didn't find credentials from the structure, 
+        // they might be in the client state or we need to search harder
+        Log.d(TAG, "   ⚠️ Could not extract credentials from structure directly")
+        Log.d(TAG, "   🔄 Trying alternative extraction methods...")
+
+        // Try one more time with a more aggressive search
+        for (context in request.fillContexts) {
+            val structure = context.structure
+
+            for (i in 0 until structure.windowNodeCount) {
+                val windowNode = structure.getWindowNodeAt(i)
+                val result = searchAllNodesForCredentials(windowNode.rootViewNode, loginFields)
+                if (result.first != null && result.second != null) {
+                    Log.d(TAG, "   ✅ Found credentials from aggressive search!")
+                    return Credentials(result.first!!, result.second!!)
+                }
+            }
+        }
+
+        Log.d(TAG, "   ❌ Failed to extract credentials from all methods")
         return null
+    }
+
+    /**
+     * Search all nodes recursively for any text values
+     */
+    private fun searchAllNodesForCredentials(
+        node: AssistStructure.ViewNode,
+        loginFields: LoginFields
+    ): Pair<String?, String?> {
+        var username: String? = null
+        var password: String? = null
+
+        try {
+            val autofillId = node.autofillId
+            val autofillValue = node.autofillValue
+
+            // Try autofill value first
+            if (autofillValue != null && autofillValue.isText) {
+                val text = autofillValue.textValue.toString()
+
+                if (text.isNotBlank()) {
+                    when (autofillId) {
+                        loginFields.usernameId -> {
+                            username = text
+                            Log.d(
+                                TAG,
+                                "      📧 Found username via autofillValue: ${text.take(3)}..."
+                            )
+                        }
+
+                        loginFields.passwordId -> {
+                            password = text
+                            Log.d(
+                                TAG,
+                                "      🔑 Found password via autofillValue: ${text.take(2)}..."
+                            )
+                        }
+
+                        loginFields.emailId -> {
+                            if (username == null) {
+                                username = text
+                                Log.d(
+                                    TAG,
+                                    "      📧 Found email via autofillValue: ${text.take(3)}..."
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Also try text property as fallback
+            val textValue = node.text?.toString()
+            if (textValue != null && textValue.isNotBlank()) {
+                when (autofillId) {
+                    loginFields.usernameId -> {
+                        if (username == null) {
+                            username = textValue
+                            Log.d(TAG, "      📧 Found username via text: ${textValue.take(3)}...")
+                        }
+                    }
+
+                    loginFields.passwordId -> {
+                        if (password == null) {
+                            password = textValue
+                            Log.d(TAG, "      🔑 Found password via text: ${textValue.take(2)}...")
+                        }
+                    }
+
+                    loginFields.emailId -> {
+                        if (username == null) {
+                            username = textValue
+                            Log.d(TAG, "      📧 Found email via text: ${textValue.take(3)}...")
+                        }
+                    }
+                }
+            }
+
+            // Check children recursively
+            for (i in 0 until node.childCount) {
+                val childResult = searchAllNodesForCredentials(node.getChildAt(i), loginFields)
+                if (username == null) username = childResult.first
+                if (password == null) password = childResult.second
+
+                // Early exit if we found both
+                if (username != null && password != null) {
+                    return Pair(username, password)
+                }
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error in searchAllNodesForCredentials", e)
+        }
+
+        return Pair(username, password)
     }
 
     /**

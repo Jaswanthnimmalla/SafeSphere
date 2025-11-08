@@ -284,6 +284,9 @@ fun MainAppContent(viewModel: SafeSphereViewModel) {
                             },
                             onLogin = { credentials ->
                                 viewModel.login(credentials)
+                            },
+                            onNavigateToDashboard = {
+                                viewModel.navigateToScreen(SafeSphereScreen.DASHBOARD)
                             }
                         )
 
@@ -296,6 +299,9 @@ fun MainAppContent(viewModel: SafeSphereViewModel) {
                             },
                             onRegister = { data ->
                                 viewModel.register(data)
+                            },
+                            onNavigateToOnboarding = {
+                                viewModel.navigateToScreen(SafeSphereScreen.ONBOARDING)
                             }
                         )
 

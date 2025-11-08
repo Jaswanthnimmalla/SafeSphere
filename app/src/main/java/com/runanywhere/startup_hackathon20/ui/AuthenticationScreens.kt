@@ -45,7 +45,8 @@ import kotlinx.coroutines.withContext
 fun LoginScreen(
     onLoginSuccess: (User) -> Unit,
     onNavigateToRegister: () -> Unit,
-    onLogin: suspend (LoginCredentials) -> AuthResult
+    onLogin: suspend (LoginCredentials) -> AuthResult,
+    onNavigateToDashboard: () -> Unit
 ) {
     var email by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
@@ -106,7 +107,9 @@ fun LoginScreen(
                             isLoading = false
 
                             when (result) {
-                                is AuthResult.Success -> onLoginSuccess(result.user)
+                                is AuthResult.Success -> {
+                                    onNavigateToDashboard()
+                                }
                                 is AuthResult.Error -> {
                                     errorMessage = result.message
                                     biometricExhausted = true
@@ -168,8 +171,8 @@ fun LoginScreen(
                 // Get current passwords (no collection, just a single read)
                 val allPasswords = passwordRepo.passwords.value
                 val filtered = allPasswords.filter {
-                it.service.contains("SafeSphere", ignoreCase = true) ||
-                    it.url.contains("startup_hackathon20", ignoreCase = true)
+                    it.service.contains("SafeSphere", ignoreCase = true) ||
+                            it.url.contains("startup_hackathon20", ignoreCase = true)
                 }
 
                 withContext(Dispatchers.Main) {
@@ -207,19 +210,19 @@ fun LoginScreen(
 
                         withContext(Dispatchers.Main) {
                             showSaveCredentialsDialog = false
-                            onLoginSuccess(user)
+                            onNavigateToDashboard()
                         }
                     } catch (e: Exception) {
                         withContext(Dispatchers.Main) {
                             showSaveCredentialsDialog = false
-                            onLoginSuccess(user)
+                            onNavigateToDashboard()
                         }
                     }
                 }
             },
             onDismiss = {
                 showSaveCredentialsDialog = false
-                onLoginSuccess(user)
+                onNavigateToDashboard()
             }
         )
     }
@@ -428,8 +431,8 @@ fun LoginScreen(
                                                 loginCredentials = Pair(email, password)
                                                 showSaveCredentialsDialog = true
                                             } else {
-                                                // Credentials already saved, just login
-                                                onLoginSuccess(result.user)
+                                                // Credentials already saved, navigate to dashboard
+                                                onNavigateToDashboard()
                                             }
                                         }
 
@@ -475,7 +478,7 @@ fun LoginScreen(
                                                 isLoading = false
 
                                                 when (result) {
-                                                    is AuthResult.Success -> onLoginSuccess(result.user)
+                                                    is AuthResult.Success -> onNavigateToDashboard()
                                                     is AuthResult.Error -> errorMessage =
                                                         result.message
                                                 }
@@ -627,7 +630,8 @@ fun SavedCredentialsDropdown(
 fun RegisterScreen(
     onRegisterSuccess: (User) -> Unit,
     onNavigateToLogin: () -> Unit,
-    onRegister: suspend (RegistrationData) -> AuthResult
+    onRegister: suspend (RegistrationData) -> AuthResult,
+    onNavigateToOnboarding: () -> Unit
 ) {
     var name by remember { mutableStateOf("") }
     var email by remember { mutableStateOf("") }
@@ -671,19 +675,22 @@ fun RegisterScreen(
                         
                         withContext(Dispatchers.Main) {
                             showSaveCredentialsDialog = false
-                            onRegisterSuccess(user)
+                            // Navigate to onboarding after saving
+                            onNavigateToOnboarding()
                         }
                     } catch (e: Exception) {
                         withContext(Dispatchers.Main) {
                             showSaveCredentialsDialog = false
-                            onRegisterSuccess(user)
+                            // Still navigate even if save failed
+                            onNavigateToOnboarding()
                         }
                     }
                 }
             },
             onDismiss = {
                 showSaveCredentialsDialog = false
-                onRegisterSuccess(user)
+                // Navigate to onboarding even if user skipped saving
+                onNavigateToOnboarding()
             }
         )
     }

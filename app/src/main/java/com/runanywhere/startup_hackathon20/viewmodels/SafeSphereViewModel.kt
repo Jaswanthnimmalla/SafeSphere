@@ -588,7 +588,8 @@ class SafeSphereViewModel(application: Application) : AndroidViewModel(applicati
         return authManager.login(credentials).also { result ->
             if (result is AuthResult.Success) {
                 _currentUser.value = result.user
-                _currentScreen.value = SafeSphereScreen.DASHBOARD
+                // DON'T navigate here - let the UI show save dialog first
+                // _currentScreen.value = SafeSphereScreen.DASHBOARD  // REMOVED
                 clearNavigationStack()
                 showMessage("✅ Welcome back, ${result.user.name}!")
             }
@@ -602,7 +603,8 @@ class SafeSphereViewModel(application: Application) : AndroidViewModel(applicati
         return authManager.register(data).also { result ->
             if (result is AuthResult.Success) {
                 _currentUser.value = result.user
-                _currentScreen.value = SafeSphereScreen.ONBOARDING
+                // DON'T navigate here - let the UI show save dialog first
+                // _currentScreen.value = SafeSphereScreen.ONBOARDING  // REMOVED
                 clearNavigationStack()
                 showMessage("✅ Welcome to SafeSphere, ${result.user.name}!")
             }
