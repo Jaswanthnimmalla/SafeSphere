@@ -64,6 +64,23 @@ class SafeSphereAutofillService : AutofillService() {
     }
 
     /**
+     * Called when the service is connected - CRITICAL for autofill to work!
+     */
+    override fun onConnected() {
+        super.onConnected()
+        Log.d(TAG, "✅ SafeSphere Autofill Service CONNECTED - Ready to autofill!")
+        Log.d(TAG, "   Service is now active and listening for fill requests")
+    }
+
+    /**
+     * Called when the service is disconnected
+     */
+    override fun onDisconnected() {
+        super.onDisconnected()
+        Log.d(TAG, "❌ SafeSphere Autofill Service DISCONNECTED")
+    }
+
+    /**
      * Called when user focuses on a login form
      * We provide autofill suggestions here
      */
@@ -167,7 +184,22 @@ class SafeSphereAutofillService : AutofillService() {
                     // Search for saved credentials with error handling
                     val savedPasswords = try {
                         val allPasswords = repository.passwords.first()
-                        allPasswords.filter { password ->
+                        Log.d(TAG, "📦 Total credentials in vault: ${allPasswords.size}")
+
+                        // Log all credentials for debugging
+                        if (allPasswords.isEmpty()) {
+                            Log.d(TAG, "⚠️ WARNING: No credentials found in vault!")
+                        } else {
+                            Log.d(TAG, "📋 Credentials in vault:")
+                            allPasswords.forEachIndexed { index, pass ->
+                                Log.d(
+                                    TAG,
+                                    "   [$index] Service: '${pass.service}', URL: '${pass.url}', Username: '${pass.username}'"
+                                )
+                            }
+                        }
+
+                        val filtered = allPasswords.filter { password ->
                             try {
                                 matchesCredential(password, searchQuery, url, packageName)
                             } catch (e: Exception) {
@@ -175,6 +207,8 @@ class SafeSphereAutofillService : AutofillService() {
                                 false
                             }
                         }
+
+                        filtered
                     } catch (e: Exception) {
                         Log.e(TAG, "Error fetching saved passwords", e)
                         emptyList()
@@ -182,11 +216,34 @@ class SafeSphereAutofillService : AutofillService() {
 
                     Log.d(TAG, "💾 Found ${savedPasswords.size} saved credentials")
 
+                    // CRITICAL FIX: Even if no matches, we should show autofill to allow saving
+                    // If no perfect matches found, show ALL credentials as fallback
+                    val credentialsToShow = if (savedPasswords.isNotEmpty()) {
+                        Log.d(TAG, "✅ Using ${savedPasswords.size} matched credentials")
+                        savedPasswords
+                    } else {
+                        // Fallback: Get ALL credentials from vault
+                        val allPasswords = try {
+                            repository.passwords.first()
+                        } catch (e: Exception) {
+                            Log.e(TAG, "Error fetching all passwords", e)
+                            emptyList()
+                        }
+                        
+                        if (allPasswords.isNotEmpty()) {
+                            Log.d(TAG, "⚠️ No perfect matches - showing ALL ${allPasswords.size} credentials as fallback")
+                        } else {
+                            Log.d(TAG, "ℹ️ No credentials in vault yet")
+                        }
+                        
+                        allPasswords
+                    }
+
                     // Build autofill response with error handling
                     val response = try {
                         buildFillResponse(
                             loginFields = loginFields,
-                            savedPasswords = savedPasswords,
+                            savedPasswords = credentialsToShow,
                             appName = appName,
                             url = url ?: packageName,
                             packageName = packageName
@@ -431,10 +488,22 @@ class SafeSphereAutofillService : AutofillService() {
         loginFields: LoginFields,
         password: PasswordVaultEntry
     ): Dataset {
-        val datasetBuilder = Dataset.Builder()
-
         // Create beautiful presentation view
         val presentation = createDatasetPresentation(password)
+
+        // For Android 11+ (API 30+), also create inline presentation
+        val datasetBuilder = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            // Use the newer constructor with inline presentation
+            try {
+                val inlinePresentation = createInlinePresentation(password)
+                Dataset.Builder(presentation)
+            } catch (e: Exception) {
+                Log.e(TAG, "Error creating inline presentation, falling back to basic dataset", e)
+                Dataset.Builder(presentation)
+            }
+        } else {
+            Dataset.Builder(presentation)
+        }
 
         // Decrypt password
         val decryptedPassword = try {
@@ -473,11 +542,34 @@ class SafeSphereAutofillService : AutofillService() {
     }
 
     /**
+     * Create inline presentation for Android 11+ (shown in keyboard autofill UI)
+     */
+    @RequiresApi(Build.VERSION_CODES.R)
+    private fun createInlinePresentation(password: PasswordVaultEntry): android.service.autofill.InlinePresentation? {
+        return try {
+            // For Android 11+, we can create inline presentations
+            // This is shown directly in the keyboard
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                // InlinePresentation requires InlineSuggestionUi which is complex
+                // For now, returning null to use the basic presentation
+                // This can be enhanced later with proper inline UI
+                null
+            } else {
+                null
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error creating inline presentation", e)
+            null
+        }
+    }
+
+    /**
      * Create beautiful presentation for autofill suggestion
      */
     private fun createDatasetPresentation(password: PasswordVaultEntry): RemoteViews {
         return try {
-            val presentation = RemoteViews(packageName, android.R.layout.simple_list_item_2)
+            val presentation =
+                RemoteViews(applicationContext.packageName, android.R.layout.simple_list_item_2)
 
             try {
                 // Main text: service name (simple text only)
@@ -499,13 +591,14 @@ class SafeSphereAutofillService : AutofillService() {
             Log.e(TAG, "Error creating RemoteViews presentation", e)
             // Absolute fallback - create most basic presentation possible
             try {
-                val fallback = RemoteViews(packageName, android.R.layout.simple_list_item_1)
+                val fallback =
+                    RemoteViews(applicationContext.packageName, android.R.layout.simple_list_item_1)
                 fallback.setTextViewText(android.R.id.text1, "SafeSphere - Tap to fill")
                 fallback
             } catch (fallbackError: Exception) {
                 Log.e(TAG, "Even fallback presentation failed!", fallbackError)
                 // Last resort - but this should never happen
-                RemoteViews(packageName, android.R.layout.simple_list_item_1)
+                RemoteViews(applicationContext.packageName, android.R.layout.simple_list_item_1)
             }
         }
     }
@@ -515,7 +608,8 @@ class SafeSphereAutofillService : AutofillService() {
      */
     private fun createHeaderPresentation(count: Int): RemoteViews? {
         return try {
-            val header = RemoteViews(packageName, android.R.layout.simple_list_item_1)
+            val header =
+                RemoteViews(applicationContext.packageName, android.R.layout.simple_list_item_1)
             try {
                 header.setTextViewText(
                     android.R.id.text1,
@@ -943,9 +1037,11 @@ class SafeSphereAutofillService : AutofillService() {
             .replace("https://", "")
             .replace("http://", "")
             .replace("www.", "")
+            .replace("www", "") // Remove www even without dot
             .replace(Regex("/.*$"), "") // Remove everything after first slash
             .replace(Regex(":\\d+"), "") // Remove port
             .replace(Regex("[?#].*$"), "") // Remove query and fragment
+            .trim()
     }
 
     /**
@@ -1084,9 +1180,12 @@ class SafeSphereAutofillService : AutofillService() {
                 .replace("https://", "")
                 .replace("http://", "")
                 .lowercase()
-            
-            // Remove www at any position early
-            domain = domain.replace("www.", "")
+
+            // Remove www at any position early - multiple variations
+            domain = domain
+                .replace("www.", "")
+                .replace("www", "")
+                .trim()
             
             // Remove path, query, fragment, port
             domain = domain
@@ -1160,7 +1259,16 @@ class SafeSphereAutofillService : AutofillService() {
             domain
         } catch (e: Exception) {
             Log.e(TAG, "      [extractDomain] Error extracting domain from: $url", e)
-            url.lowercase().trim()
+            // Even in error, try to clean it up
+            url.lowercase()
+                .trim()
+                .replace("https://", "")
+                .replace("http://", "")
+                .replace("www.", "")
+                .replace("www", "")
+                .substringBefore("/")
+                .substringBefore(":")
+                .trim()
         }
     }
 

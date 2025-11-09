@@ -3,6 +3,7 @@ package com.runanywhere.startup_hackathon20.ui
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -321,26 +322,46 @@ private fun PasswordDetailCard(
     val hasIssues = detail.issues.isNotEmpty()
     val isBreached = detail.breachResult?.isBreached == true
 
+    // Determine background color based on password strength
+    val backgroundColor = when {
+        isBreached -> Color(0xFFFFEBEE)  // Light red for leaked
+        detail.strength.label == "Weak" || detail.strength.label == "Very Weak" -> Color(0xFFFFF3E0)  // Light orange
+        detail.strength.label == "Fair" -> Color(0xFFFFF8E1)  // Light yellow
+        detail.strength.label == "Good" -> Color(0xFFE3F2FD)  // Light blue
+        detail.strength.label == "Strong" || detail.strength.label == "Very Strong" -> Color(
+            0xFFE8F5E9
+        )  // Light green
+        else -> Color(0xFFF5F5F5)  // Light gray
+    }
+
+    // Determine border based on severity
+    val borderColor = when {
+        isBreached -> Color(0xFFD32F2F)  // Red for leaked
+        detail.strength.label == "Weak" || detail.strength.label == "Very Weak" -> Color(0xFFFF9800)  // Orange
+        detail.strength.label == "Fair" -> Color(0xFFFBC02D)  // Yellow
+        detail.strength.label == "Good" -> Color(0xFF2196F3)  // Blue
+        else -> Color(0xFF4CAF50)  // Green for strong
+    }
+
     Card(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier
+            .fillMaxWidth()
+            .border(
+                width = if (isBreached) 3.dp else 2.dp,
+                color = borderColor,
+                shape = RoundedCornerShape(12.dp)
+            ),
         colors = CardDefaults.cardColors(
-            containerColor = if (isBreached) {
-                MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.2f)
-            } else if (hasIssues) {
-                MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.1f)
-            } else {
-                MaterialTheme.colorScheme.surfaceVariant
-            }
+            containerColor = backgroundColor
         ),
-        border = if (isBreached) {
-            BorderStroke(2.dp, Color(0xFFD32F2F))
-        } else null
+        shape = RoundedCornerShape(12.dp),
+        elevation = CardDefaults.cardElevation(defaultElevation = if (isBreached) 6.dp else 2.dp)
     ) {
         Column(
             modifier = Modifier.padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            // Title and Strength
+            // Title and Strength Badge
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -350,28 +371,29 @@ private fun PasswordDetailCard(
                     Text(
                         text = detail.title,
                         style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold
+                        fontWeight = FontWeight.Bold,
+                        color = Color.Black
                     )
 
                     // Breach Warning (Most Prominent)
                     detail.breachResult?.let { breach ->
                         if (breach.isBreached) {
-                            Spacer(modifier = Modifier.height(4.dp))
+                            Spacer(modifier = Modifier.height(8.dp))
                             Row(
                                 verticalAlignment = Alignment.CenterVertically,
                                 horizontalArrangement = Arrangement.spacedBy(6.dp)
                             ) {
                                 Surface(
-                                    color = Color(breach.severity.color),
+                                    color = Color(0xFFD32F2F),
                                     shape = RoundedCornerShape(8.dp)
                                 ) {
                                     Text(
                                         text = "🚨 LEAKED",
                                         modifier = Modifier.padding(
-                                            horizontal = 8.dp,
-                                            vertical = 4.dp
+                                            horizontal = 12.dp,
+                                            vertical = 6.dp
                                         ),
-                                        style = MaterialTheme.typography.labelSmall,
+                                        style = MaterialTheme.typography.labelMedium,
                                         color = Color.White,
                                         fontWeight = FontWeight.Bold
                                     )
@@ -379,7 +401,7 @@ private fun PasswordDetailCard(
                                 Text(
                                     text = breach.message,
                                     style = MaterialTheme.typography.bodySmall,
-                                    color = Color(breach.severity.color),
+                                    color = Color(0xFFD32F2F),
                                     fontWeight = FontWeight.Bold
                                 )
                             }
@@ -387,33 +409,92 @@ private fun PasswordDetailCard(
                     }
                 }
 
+                // Strength Badge - Larger and More Prominent
                 Surface(
                     color = strengthColor,
-                    shape = RoundedCornerShape(12.dp)
+                    shape = RoundedCornerShape(12.dp),
+                    shadowElevation = 2.dp
                 ) {
-                    Text(
-                        text = detail.strength.label,
-                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp),
-                        style = MaterialTheme.typography.labelMedium,
-                        color = Color.White,
-                        fontWeight = FontWeight.Bold
-                    )
+                    Row(
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        // Emoji indicator
+                        Text(
+                            text = when {
+                                isBreached -> "🚨"
+                                detail.strength.label.contains("Strong") -> "💪"
+                                detail.strength.label == "Good" -> "👍"
+                                detail.strength.label == "Fair" -> "⚠️"
+                                else -> "🔴"
+                            },
+                            style = MaterialTheme.typography.titleMedium
+                        )
+                        Text(
+                            text = detail.strength.label,
+                            style = MaterialTheme.typography.labelLarge,
+                            color = Color.White,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
                 }
+            }
+
+            // Visual Strength Bar
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(8.dp)
+                    .clip(RoundedCornerShape(4.dp))
+                    .background(Color.White.copy(alpha = 0.5f))
+            ) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxHeight()
+                        .fillMaxWidth(detail.strength.score / 100f)
+                        .background(
+                            Brush.horizontalGradient(
+                                colors = listOf(
+                                    strengthColor.copy(alpha = 0.7f),
+                                    strengthColor
+                                )
+                            )
+                        )
+                )
             }
 
             // Issues
             if (detail.issues.isNotEmpty()) {
-                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(Color.White.copy(alpha = 0.7f))
+                        .padding(12.dp),
+                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    Text(
+                        text = "⚠️ Issues:",
+                        style = MaterialTheme.typography.labelMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = Color(0xFFE65100)
+                    )
                     detail.issues.forEach { issue ->
                         Row(
                             verticalAlignment = Alignment.Top,
-                            horizontalArrangement = Arrangement.spacedBy(4.dp)
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
                         ) {
-                            Text(text = "•", color = MaterialTheme.colorScheme.error)
+                            Text(
+                                text = "•",
+                                color = Color(0xFFD32F2F),
+                                fontWeight = FontWeight.Bold
+                            )
                             Text(
                                 text = issue,
                                 style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.error
+                                color = Color(0xFFD32F2F),
+                                fontWeight = FontWeight.Medium
                             )
                         }
                     }
@@ -422,11 +503,18 @@ private fun PasswordDetailCard(
 
             // Age info
             if (detail.ageInDays > 0) {
-                Text(
-                    text = "Password age: ${detail.ageInDays} days",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    Text(text = "📅", style = MaterialTheme.typography.bodyMedium)
+                    Text(
+                        text = "Password age: ${detail.ageInDays} days",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Color.Black.copy(alpha = 0.7f),
+                        fontWeight = FontWeight.Medium
+                    )
+                }
             }
 
             // Fix button if has issues OR breached
@@ -435,23 +523,35 @@ private fun PasswordDetailCard(
                     onClick = onFix,
                     modifier = Modifier.fillMaxWidth(),
                     colors = ButtonDefaults.buttonColors(
-                        containerColor = if (isBreached) Color(0xFFD32F2F) else MaterialTheme.colorScheme.primary
-                    )
+                        containerColor = if (isBreached) Color(0xFFD32F2F) else Color(0xFFFF9800)
+                    ),
+                    shape = RoundedCornerShape(10.dp),
+                    elevation = ButtonDefaults.buttonElevation(defaultElevation = 4.dp)
                 ) {
                     Icon(Icons.Default.Refresh, contentDescription = null)
                     Spacer(modifier = Modifier.width(8.dp))
-                    Text(if (isBreached) "Change Immediately!" else "Generate Strong Password")
+                    Text(
+                        text = if (isBreached) "🚨 Change Immediately!" else "🔄 Generate Strong Password",
+                        fontWeight = FontWeight.Bold
+                    )
                 }
             } else {
                 Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(Color(0xFF4CAF50).copy(alpha = 0.15f))
+                        .padding(12.dp),
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                    horizontalArrangement = Arrangement.Center
                 ) {
-                    Text(text = "✅", style = MaterialTheme.typography.bodyMedium)
+                    Text(text = "✅", style = MaterialTheme.typography.titleMedium)
+                    Spacer(modifier = Modifier.width(8.dp))
                     Text(
                         text = "Strong & Secure",
                         style = MaterialTheme.typography.bodyMedium,
-                        color = Color(0xFF388E3C)
+                        color = Color(0xFF388E3C),
+                        fontWeight = FontWeight.Bold
                     )
                 }
             }

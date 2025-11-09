@@ -161,10 +161,9 @@ fun SafeSphereDrawerContent(
                 NavigationDrawerItem(
                     iconEmoji = "ℹ️",
                     label = "About Us",
-                    selected = false,
+                    selected = currentScreen == SafeSphereScreen.ABOUT_US,
                     onClick = {
-                        // TODO: Add About Us screen
-                        // onNavigate(SafeSphereScreen.ABOUT)
+                        onNavigate(SafeSphereScreen.ABOUT_US)
                     }
                 )
 
@@ -172,10 +171,9 @@ fun SafeSphereDrawerContent(
                 NavigationDrawerItem(
                     iconEmoji = "📝",
                     label = "Blogs",
-                    selected = false,
+                    selected = currentScreen == SafeSphereScreen.BLOGS,
                     onClick = {
-                        // TODO: Add Blogs screen
-                        // onNavigate(SafeSphereScreen.BLOGS)
+                        onNavigate(SafeSphereScreen.BLOGS)
                     }
                 )
 
@@ -183,10 +181,9 @@ fun SafeSphereDrawerContent(
                 NavigationDrawerItem(
                     iconEmoji = "📧",
                     label = "Contact Us",
-                    selected = false,
+                    selected = currentScreen == SafeSphereScreen.CONTACT_US,
                     onClick = {
-                        // TODO: Add Contact Us screen
-                        // onNavigate(SafeSphereScreen.CONTACT)
+                        onNavigate(SafeSphereScreen.CONTACT_US)
                     }
                 )
 
@@ -200,6 +197,13 @@ fun SafeSphereDrawerContent(
                     }
                 )
 
+                // Desktop Sync
+                NavigationDrawerItem(
+                    iconEmoji = "🖥️",
+                    label = "Desktop Sync",
+                    selected = currentScreen == SafeSphereScreen.DESKTOP_SYNC,
+                    onClick = { onNavigate(SafeSphereScreen.DESKTOP_SYNC) }
+                )
             }
 
             // Logout Button at Bottom
@@ -411,56 +415,45 @@ fun MenuIconButton(
 }
 
 /**
- * Notifications Screen - Security alerts and activity log
+ * Notifications Screen - Enhanced with filters, search, and real-time updates
  */
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun NotificationsScreen(viewModel: SafeSphereViewModel) {
-    val notificationItems = remember {
-        listOf(
-            NotificationItem(
-                id = "1",
-                title = "🔐 Vault Item Added",
-                message = "New encrypted item saved to Privacy Vault",
-                timestamp = System.currentTimeMillis() - 3600000,
-                type = NotificationType.SUCCESS,
-                isRead = false
-            ),
-            NotificationItem(
-                id = "2",
-                title = "🛡️ Security Scan Complete",
-                message = "All ${10} items encrypted with AES-256",
-                timestamp = System.currentTimeMillis() - 7200000,
-                type = NotificationType.INFO,
-                isRead = true
-            ),
-            NotificationItem(
-                id = "3",
-                title = "⚠️ Threat Mitigated",
-                message = "Cloud exposure attempt blocked by offline mode",
-                timestamp = System.currentTimeMillis() - 14400000,
-                type = NotificationType.WARNING,
-                isRead = true
-            ),
-            NotificationItem(
-                id = "4",
-                title = "✅ Backup Successful",
-                message = "Local encrypted backup created",
-                timestamp = System.currentTimeMillis() - 86400000,
-                type = NotificationType.SUCCESS,
-                isRead = true
-            ),
-            NotificationItem(
-                id = "5",
-                title = "🔒 Login Detected",
-                message = "New login from this device",
-                timestamp = System.currentTimeMillis() - 172800000,
-                type = NotificationType.INFO,
-                isRead = true
-            )
-        )
-    }
+    val notifications by viewModel.notifications.collectAsState()
+    val unreadCount by viewModel.unreadNotificationCount.collectAsState()
+    
+    var selectedFilter by remember { mutableStateOf(com.runanywhere.startup_hackathon20.viewmodels.NotificationFilter.ALL) }
+    var searchQuery by remember { mutableStateOf("") }
+    var showSearchBar by remember { mutableStateOf(false) }
 
-    var selectedFilter by remember { mutableStateOf(NotificationFilter.ALL) }
+    // Filter and search notifications
+    val filteredNotifications = remember(notifications, selectedFilter, searchQuery) {
+        val filtered = when (selectedFilter) {
+            com.runanywhere.startup_hackathon20.viewmodels.NotificationFilter.ALL -> notifications
+            com.runanywhere.startup_hackathon20.viewmodels.NotificationFilter.UNREAD -> 
+                notifications.filter { !it.isRead }
+            com.runanywhere.startup_hackathon20.viewmodels.NotificationFilter.SECURITY -> 
+                notifications.filter { it.category == com.runanywhere.startup_hackathon20.viewmodels.NotificationCategory.SECURITY }
+            com.runanywhere.startup_hackathon20.viewmodels.NotificationFilter.ACTIVITY -> 
+                notifications.filter { 
+                    it.category == com.runanywhere.startup_hackathon20.viewmodels.NotificationCategory.ACTIVITY ||
+                    it.category == com.runanywhere.startup_hackathon20.viewmodels.NotificationCategory.VAULT
+                }
+            com.runanywhere.startup_hackathon20.viewmodels.NotificationFilter.THREATS -> 
+                notifications.filter { it.category == com.runanywhere.startup_hackathon20.viewmodels.NotificationCategory.THREAT }
+        }
+        
+        // Apply search filter
+        if (searchQuery.isNotBlank()) {
+            filtered.filter {
+                it.title.contains(searchQuery, ignoreCase = true) ||
+                it.message.contains(searchQuery, ignoreCase = true)
+            }
+        } else {
+            filtered
+        }
+    }
 
     Column(
         modifier = Modifier
@@ -474,36 +467,185 @@ fun NotificationsScreen(viewModel: SafeSphereViewModel) {
                 )
             )
     ) {
-        // Stats Card
+        // Header with Stats and Actions
         GlassCard(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(16.dp)
         ) {
-            Row(
+            Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(20.dp),
-                horizontalArrangement = Arrangement.SpaceEvenly
+                    .padding(20.dp)
             ) {
-                NotificationStat(
-                    icon = "🔔",
-                    count = notificationItems.count { !it.isRead },
-                    label = "New",
-                    color = SafeSphereColors.Primary
-                )
-                NotificationStat(
-                    icon = "📝",
-                    count = notificationItems.size,
-                    label = "Total",
-                    color = SafeSphereColors.Info
-                )
-                NotificationStat(
-                    icon = "🛡️",
-                    count = notificationItems.count { it.type == NotificationType.WARNING },
-                    label = "Alerts",
-                    color = SafeSphereColors.Warning
-                )
+                // Title and Actions Row
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column {
+                        Text(
+                            text = "Notifications",
+                            fontSize = 24.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = SafeSphereColors.TextPrimary
+                        )
+                        Text(
+                            text = if (unreadCount > 0) "$unreadCount unread" else "All caught up!",
+                            fontSize = 13.sp,
+                            color = if (unreadCount > 0) SafeSphereColors.Primary else SafeSphereColors.TextSecondary
+                        )
+                    }
+                    
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        // Search button
+                        IconButton(
+                            onClick = { showSearchBar = !showSearchBar },
+                            modifier = Modifier
+                                .size(40.dp)
+                                .clip(CircleShape)
+                                .background(
+                                    if (showSearchBar) SafeSphereColors.Primary.copy(alpha = 0.2f)
+                                    else SafeSphereColors.Surface
+                                )
+                        ) {
+                            Icon(
+                                imageVector = Icons.Filled.Search,
+                                contentDescription = "Search",
+                                tint = if (showSearchBar) SafeSphereColors.Primary else SafeSphereColors.TextSecondary,
+                                modifier = Modifier.size(20.dp)
+                            )
+                        }
+                        
+                        // Mark all as read button
+                        if (unreadCount > 0) {
+                            IconButton(
+                                onClick = { viewModel.markAllNotificationsAsRead() },
+                                modifier = Modifier
+                                    .size(40.dp)
+                                    .clip(CircleShape)
+                                    .background(SafeSphereColors.Success.copy(alpha = 0.1f))
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Filled.Done,
+                                    contentDescription = "Mark all as read",
+                                    tint = SafeSphereColors.Success,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                            }
+                        }
+                        
+                        // Clear all button
+                        if (notifications.isNotEmpty()) {
+                            IconButton(
+                                onClick = { viewModel.clearAllNotifications() },
+                                modifier = Modifier
+                                    .size(40.dp)
+                                    .clip(CircleShape)
+                                    .background(SafeSphereColors.Error.copy(alpha = 0.1f))
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Filled.Delete,
+                                    contentDescription = "Clear all",
+                                    tint = SafeSphereColors.Error,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                            }
+                        }
+                    }
+                }
+                
+                // Search Bar
+                AnimatedVisibility(
+                    visible = showSearchBar,
+                    enter = expandVertically() + fadeIn(),
+                    exit = shrinkVertically() + fadeOut()
+                ) {
+                    Column {
+                        Spacer(modifier = Modifier.height(16.dp))
+                        OutlinedTextField(
+                            value = searchQuery,
+                            onValueChange = { searchQuery = it },
+                            modifier = Modifier.fillMaxWidth(),
+                            placeholder = {
+                                Text(
+                                    text = "Search notifications...",
+                                    color = SafeSphereColors.TextSecondary
+                                )
+                            },
+                            leadingIcon = {
+                                Icon(
+                                    imageVector = Icons.Filled.Search,
+                                    contentDescription = null,
+                                    tint = SafeSphereColors.TextSecondary
+                                )
+                            },
+                            trailingIcon = {
+                                if (searchQuery.isNotEmpty()) {
+                                    IconButton(onClick = { searchQuery = "" }) {
+                                        Icon(
+                                            imageVector = Icons.Filled.Close,
+                                            contentDescription = "Clear search",
+                                            tint = SafeSphereColors.TextSecondary
+                                        )
+                                    }
+                                }
+                            },
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedBorderColor = SafeSphereColors.Primary,
+                                unfocusedBorderColor = SafeSphereColors.TextSecondary.copy(alpha = 0.3f),
+                                focusedTextColor = SafeSphereColors.TextPrimary,
+                                unfocusedTextColor = SafeSphereColors.TextPrimary
+                            ),
+                            shape = RoundedCornerShape(12.dp),
+                            singleLine = true
+                        )
+                    }
+                }
+                
+                Spacer(modifier = Modifier.height(16.dp))
+                
+                // Stats Row
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceEvenly
+                ) {
+                    EnhancedNotificationStat(
+                        icon = "🔔",
+                        count = unreadCount,
+                        label = "Unread",
+                        color = SafeSphereColors.Primary,
+                        isHighlighted = unreadCount > 0
+                    )
+                    EnhancedNotificationStat(
+                        icon = "📝",
+                        count = notifications.size,
+                        label = "Total",
+                        color = SafeSphereColors.Info,
+                        isHighlighted = false
+                    )
+                    EnhancedNotificationStat(
+                        icon = "🛡️",
+                        count = notifications.count { 
+                            it.category == com.runanywhere.startup_hackathon20.viewmodels.NotificationCategory.SECURITY 
+                        },
+                        label = "Security",
+                        color = SafeSphereColors.Warning,
+                        isHighlighted = false
+                    )
+                    EnhancedNotificationStat(
+                        icon = "🚨",
+                        count = notifications.count { 
+                            it.category == com.runanywhere.startup_hackathon20.viewmodels.NotificationCategory.THREAT 
+                        },
+                        label = "Threats",
+                        color = SafeSphereColors.Error,
+                        isHighlighted = false
+                    )
+                }
             }
         }
 
@@ -511,47 +653,91 @@ fun NotificationsScreen(viewModel: SafeSphereViewModel) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 16.dp)
+                .padding(horizontal = 16.dp, vertical = 8.dp)
                 .horizontalScroll(rememberScrollState()),
             horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            NotificationFilter.values().forEach { filter ->
+            com.runanywhere.startup_hackathon20.viewmodels.NotificationFilter.values().forEach { filter ->
+                val filterCount = when (filter) {
+                    com.runanywhere.startup_hackathon20.viewmodels.NotificationFilter.ALL -> notifications.size
+                    com.runanywhere.startup_hackathon20.viewmodels.NotificationFilter.UNREAD -> unreadCount
+                    com.runanywhere.startup_hackathon20.viewmodels.NotificationFilter.SECURITY -> 
+                        notifications.count { it.category == com.runanywhere.startup_hackathon20.viewmodels.NotificationCategory.SECURITY }
+                    com.runanywhere.startup_hackathon20.viewmodels.NotificationFilter.ACTIVITY -> 
+                        notifications.count { 
+                            it.category == com.runanywhere.startup_hackathon20.viewmodels.NotificationCategory.ACTIVITY ||
+                            it.category == com.runanywhere.startup_hackathon20.viewmodels.NotificationCategory.VAULT
+                        }
+                    com.runanywhere.startup_hackathon20.viewmodels.NotificationFilter.THREATS -> 
+                        notifications.count { it.category == com.runanywhere.startup_hackathon20.viewmodels.NotificationCategory.THREAT }
+                }
+                
                 FilterChip(
                     selected = selectedFilter == filter,
                     onClick = { selectedFilter = filter },
                     label = {
-                        Text(
-                            text = filter.label,
-                            fontSize = 13.sp,
-                            fontWeight = if (selectedFilter == filter) FontWeight.Bold else FontWeight.Normal
-                        )
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(4.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = filter.label,
+                                fontSize = 13.sp,
+                                fontWeight = if (selectedFilter == filter) FontWeight.Bold else FontWeight.Normal
+                            )
+                            if (filterCount > 0) {
+                                Surface(
+                                    shape = CircleShape,
+                                    color = if (selectedFilter == filter) 
+                                        Color.White.copy(alpha = 0.3f) 
+                                    else SafeSphereColors.Primary.copy(alpha = 0.2f),
+                                    modifier = Modifier.padding(start = 2.dp)
+                                ) {
+                                    Text(
+                                        text = filterCount.toString(),
+                                        fontSize = 10.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = if (selectedFilter == filter) Color.White else SafeSphereColors.Primary,
+                                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                    )
+                                }
+                            }
+                        }
                     },
                     leadingIcon = {
                         Text(text = filter.icon, fontSize = 14.sp)
                     },
                     colors = FilterChipDefaults.filterChipColors(
                         selectedContainerColor = SafeSphereColors.Primary,
-                        selectedLabelColor = Color.White
+                        selectedLabelColor = Color.White,
+                        containerColor = SafeSphereColors.Surface,
+                        labelColor = SafeSphereColors.TextPrimary
+                    ),
+                    border = FilterChipDefaults.filterChipBorder(
+                        enabled = true,
+                        selected = selectedFilter == filter,
+                        borderColor = if (selectedFilter == filter) 
+                            SafeSphereColors.Primary 
+                        else SafeSphereColors.TextSecondary.copy(alpha = 0.2f),
+                        selectedBorderColor = SafeSphereColors.Primary,
+                        borderWidth = 1.dp,
+                        selectedBorderWidth = 2.dp
                     )
                 )
             }
         }
 
-        Spacer(modifier = Modifier.height(8.dp))
-
-        // Notifications List
-        val filteredNotifications = when (selectedFilter) {
-            NotificationFilter.ALL -> notificationItems
-            NotificationFilter.UNREAD -> notificationItems.filter { !it.isRead }
-            NotificationFilter.SECURITY -> notificationItems.filter {
-                it.type == NotificationType.WARNING || it.type == NotificationType.ERROR
-            }
-
-            NotificationFilter.ACTIVITY -> notificationItems.filter {
-                it.type == NotificationType.INFO || it.type == NotificationType.SUCCESS
-            }
+        // Results info
+        if (searchQuery.isNotEmpty() || selectedFilter != com.runanywhere.startup_hackathon20.viewmodels.NotificationFilter.ALL) {
+            Text(
+                text = "${filteredNotifications.size} ${if (filteredNotifications.size == 1) "result" else "results"}",
+                fontSize = 12.sp,
+                color = SafeSphereColors.TextSecondary,
+                modifier = Modifier.padding(horizontal = 20.dp, vertical = 4.dp)
+            )
         }
 
+        // Notifications List
         if (filteredNotifications.isEmpty()) {
             // Empty state
             Column(
@@ -561,20 +747,45 @@ fun NotificationsScreen(viewModel: SafeSphereViewModel) {
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.Center
             ) {
-                Text(text = "📭", fontSize = 64.sp)
+                Text(
+                    text = if (searchQuery.isNotEmpty()) "🔍" else "📭",
+                    fontSize = 64.sp
+                )
                 Spacer(modifier = Modifier.height(16.dp))
                 Text(
-                    text = "No notifications",
+                    text = if (searchQuery.isNotEmpty()) "No results found" else "No notifications",
                     fontSize = 20.sp,
                     fontWeight = FontWeight.Bold,
                     color = SafeSphereColors.TextPrimary
                 )
                 Spacer(modifier = Modifier.height(8.dp))
                 Text(
-                    text = "You're all caught up!",
+                    text = if (searchQuery.isNotEmpty()) 
+                        "Try different search terms"
+                    else "You're all caught up!",
                     fontSize = 14.sp,
-                    color = SafeSphereColors.TextSecondary
+                    color = SafeSphereColors.TextSecondary,
+                    textAlign = TextAlign.Center
                 )
+                
+                if (searchQuery.isNotEmpty()) {
+                    Spacer(modifier = Modifier.height(16.dp))
+                    Button(
+                        onClick = { searchQuery = "" },
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = SafeSphereColors.Primary
+                        ),
+                        shape = RoundedCornerShape(12.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Filled.Clear,
+                            contentDescription = null,
+                            modifier = Modifier.size(18.dp)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("Clear Search")
+                    }
+                }
             }
         } else {
             LazyColumn(
@@ -584,7 +795,11 @@ fun NotificationsScreen(viewModel: SafeSphereViewModel) {
             ) {
                 filteredNotifications.forEach { notification ->
                     item {
-                        NotificationCard(notification)
+                        EnhancedNotificationCard(
+                            notification = notification,
+                            onMarkAsRead = { viewModel.markNotificationAsRead(notification.id) },
+                            onDelete = { viewModel.deleteNotification(notification.id) }
+                        )
                     }
                 }
             }
@@ -593,79 +808,289 @@ fun NotificationsScreen(viewModel: SafeSphereViewModel) {
 }
 
 /**
- * Notification Card
+ * Enhanced Notification Card with borders, colors, and actions
  */
 @Composable
-fun NotificationCard(notification: NotificationItem) {
-    GlassCard(
+fun EnhancedNotificationCard(
+    notification: com.runanywhere.startup_hackathon20.viewmodels.AppNotification,
+    onMarkAsRead: () -> Unit,
+    onDelete: () -> Unit
+) {
+    var showActions by remember { mutableStateOf(false) }
+    
+    val borderColor = Color(notification.type.color).copy(alpha = 0.5f)
+    val backgroundColor = Color(notification.type.color).copy(alpha = 0.05f)
+    
+    Card(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable { /* Mark as read */ }
+            .clickable {
+                if (!notification.isRead) onMarkAsRead()
+                showActions = !showActions
+            },
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = if (notification.isRead) 
+                SafeSphereColors.Surface 
+            else backgroundColor
+        ),
+        border = BorderStroke(
+            width = if (notification.isRead) 1.dp else 2.dp,
+            color = if (notification.isRead) 
+                SafeSphereColors.TextSecondary.copy(alpha = 0.2f)
+            else borderColor
+        ),
+        elevation = CardDefaults.cardElevation(
+            defaultElevation = if (notification.isRead) 2.dp else 4.dp
+        )
     ) {
-        Row(
+        Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(16.dp),
-            verticalAlignment = Alignment.Top
+                .padding(16.dp)
         ) {
-            // Icon
-            Box(
-                modifier = Modifier
-                    .size(48.dp)
-                    .clip(CircleShape)
-                    .background(notification.type.color.copy(alpha = 0.2f)),
-                contentAlignment = Alignment.Center
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.Top
             ) {
-                Text(
-                    text = notification.type.icon,
-                    fontSize = 24.sp
-                )
-            }
-
-            Spacer(modifier = Modifier.width(12.dp))
-
-            Column(modifier = Modifier.weight(1f)) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.Top
+                // Icon with category color
+                Box(
+                    modifier = Modifier
+                        .size(48.dp)
+                        .clip(CircleShape)
+                        .background(Color(notification.type.color).copy(alpha = 0.15f))
+                        .border(
+                            width = 2.dp,
+                            color = Color(notification.type.color).copy(alpha = 0.3f),
+                            shape = CircleShape
+                        ),
+                    contentAlignment = Alignment.Center
                 ) {
                     Text(
-                        text = notification.title,
-                        fontSize = 15.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        color = SafeSphereColors.TextPrimary,
-                        modifier = Modifier.weight(1f)
+                        text = notification.category.icon,
+                        fontSize = 24.sp
                     )
-
-                    if (!notification.isRead) {
-                        Box(
-                            modifier = Modifier
-                                .size(8.dp)
-                                .clip(CircleShape)
-                                .background(SafeSphereColors.Primary)
-                        )
-                    }
                 }
 
-                Spacer(modifier = Modifier.height(4.dp))
+                Spacer(modifier = Modifier.width(12.dp))
 
-                Text(
-                    text = notification.message,
-                    fontSize = 13.sp,
-                    color = SafeSphereColors.TextSecondary,
-                    lineHeight = 18.sp
-                )
+                Column(modifier = Modifier.weight(1f)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.Top
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                Text(
+                                    text = notification.title,
+                                    fontSize = 15.sp,
+                                    fontWeight = if (notification.isRead) FontWeight.Medium else FontWeight.Bold,
+                                    color = SafeSphereColors.TextPrimary
+                                )
+                                
+                                // Category badge
+                                Surface(
+                                    shape = RoundedCornerShape(6.dp),
+                                    color = Color(notification.type.color).copy(alpha = 0.15f),
+                                    border = BorderStroke(
+                                        width = 1.dp,
+                                        color = Color(notification.type.color).copy(alpha = 0.3f)
+                                    )
+                                ) {
+                                    Text(
+                                        text = notification.category.label,
+                                        fontSize = 10.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = Color(notification.type.color),
+                                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                    )
+                                }
+                            }
+                        }
 
-                Spacer(modifier = Modifier.height(8.dp))
+                        // Unread indicator
+                        if (!notification.isRead) {
+                            Box(
+                                modifier = Modifier
+                                    .size(10.dp)
+                                    .clip(CircleShape)
+                                    .background(SafeSphereColors.Primary)
+                                    .border(
+                                        width = 2.dp,
+                                        color = SafeSphereColors.Primary.copy(alpha = 0.3f),
+                                        shape = CircleShape
+                                    )
+                            )
+                        }
+                    }
 
-                Text(
-                    text = formatTimestamp(notification.timestamp),
-                    fontSize = 11.sp,
-                    color = SafeSphereColors.TextSecondary.copy(alpha = 0.7f)
-                )
+                    Spacer(modifier = Modifier.height(4.dp))
+
+                    Text(
+                        text = notification.message,
+                        fontSize = 13.sp,
+                        color = SafeSphereColors.TextSecondary,
+                        lineHeight = 18.sp
+                    )
+
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        // Timestamp
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(4.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                imageVector = Icons.Filled.DateRange,
+                                contentDescription = null,
+                                tint = SafeSphereColors.TextSecondary.copy(alpha = 0.7f),
+                                modifier = Modifier.size(12.dp)
+                            )
+                            Text(
+                                text = formatTimestamp(notification.timestamp),
+                                fontSize = 11.sp,
+                                color = SafeSphereColors.TextSecondary.copy(alpha = 0.7f)
+                            )
+                        }
+                        
+                        // Priority indicator
+                        if (notification.priority == com.runanywhere.startup_hackathon20.viewmodels.NotificationPriority.HIGH ||
+                            notification.priority == com.runanywhere.startup_hackathon20.viewmodels.NotificationPriority.CRITICAL) {
+                            Surface(
+                                shape = RoundedCornerShape(4.dp),
+                                color = SafeSphereColors.Error.copy(alpha = 0.1f),
+                                border = BorderStroke(1.dp, SafeSphereColors.Error.copy(alpha = 0.3f))
+                            ) {
+                                Text(
+                                    text = if (notification.priority == com.runanywhere.startup_hackathon20.viewmodels.NotificationPriority.CRITICAL) 
+                                        "🚨 CRITICAL" else "⚡ HIGH",
+                                    fontSize = 9.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = SafeSphereColors.Error,
+                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+            
+            // Action buttons
+            AnimatedVisibility(
+                visible = showActions,
+                enter = expandVertically() + fadeIn(),
+                exit = shrinkVertically() + fadeOut()
+            ) {
+                Column {
+                    Spacer(modifier = Modifier.height(12.dp))
+                    HorizontalDivider(
+                        color = SafeSphereColors.TextSecondary.copy(alpha = 0.1f)
+                    )
+                    Spacer(modifier = Modifier.height(12.dp))
+                    
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        if (!notification.isRead) {
+                            OutlinedButton(
+                                onClick = {
+                                    onMarkAsRead()
+                                    showActions = false
+                                },
+                                modifier = Modifier.weight(1f),
+                                shape = RoundedCornerShape(10.dp),
+                                colors = ButtonDefaults.outlinedButtonColors(
+                                    contentColor = SafeSphereColors.Success
+                                ),
+                                border = BorderStroke(1.dp, SafeSphereColors.Success.copy(alpha = 0.5f))
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Filled.Done,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(16.dp)
+                                )
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text("Mark Read", fontSize = 12.sp)
+                            }
+                        }
+                        
+                        OutlinedButton(
+                            onClick = {
+                                onDelete()
+                            },
+                            modifier = Modifier.weight(1f),
+                            shape = RoundedCornerShape(10.dp),
+                            colors = ButtonDefaults.outlinedButtonColors(
+                                contentColor = SafeSphereColors.Error
+                            ),
+                            border = BorderStroke(1.dp, SafeSphereColors.Error.copy(alpha = 0.5f))
+                        ) {
+                            Icon(
+                                imageVector = Icons.Filled.Delete,
+                                contentDescription = null,
+                                modifier = Modifier.size(16.dp)
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text("Delete", fontSize = 12.sp)
+                        }
+                    }
+                }
             }
         }
+    }
+}
+
+/**
+ * Enhanced Notification Stat with highlight
+ */
+@Composable
+fun EnhancedNotificationStat(
+    icon: String,
+    count: Int,
+    label: String,
+    color: Color,
+    isHighlighted: Boolean
+) {
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        modifier = Modifier
+            .clip(RoundedCornerShape(12.dp))
+            .background(
+                if (isHighlighted) color.copy(alpha = 0.1f) else Color.Transparent
+            )
+            .border(
+                width = if (isHighlighted) 2.dp else 0.dp,
+                color = if (isHighlighted) color.copy(alpha = 0.3f) else Color.Transparent,
+                shape = RoundedCornerShape(12.dp)
+            )
+            .padding(vertical = 8.dp, horizontal = 12.dp)
+    ) {
+        Text(
+            text = icon,
+            fontSize = 28.sp
+        )
+        Spacer(modifier = Modifier.height(4.dp))
+        Text(
+            text = count.toString(),
+            fontSize = 24.sp,
+            fontWeight = FontWeight.Bold,
+            color = if (isHighlighted) color else SafeSphereColors.TextPrimary
+        )
+        Text(
+            text = label,
+            fontSize = 11.sp,
+            color = SafeSphereColors.TextSecondary,
+            fontWeight = if (isHighlighted) FontWeight.SemiBold else FontWeight.Normal
+        )
     }
 }
 

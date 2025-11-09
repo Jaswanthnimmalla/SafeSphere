@@ -45,7 +45,6 @@ class PasswordVaultRepository private constructor(private val context: Context) 
             return instance ?: synchronized(this) {
                 instance ?: PasswordVaultRepository(context.applicationContext).also {
                     instance = it
-                    it.loadPasswords()
                 }
             }
         }
@@ -424,21 +423,26 @@ class PasswordVaultRepository private constructor(private val context: Context) 
         try {
             if (!passwordFile.exists()) {
                 Log.d(TAG, "No password file found - starting fresh")
+                _passwords.value = emptyList()
                 return
             }
 
             val encryptedData = passwordFile.readText()
-            if (encryptedData.isBlank()) return
+            if (encryptedData.isBlank()) {
+                _passwords.value = emptyList()
+                return
+            }
 
             val decryptedJson = SecurityManager.decrypt(encryptedData)
             val type = object : TypeToken<List<PasswordVaultEntry>>() {}.type
             val loadedPasswords: List<PasswordVaultEntry> = gson.fromJson(decryptedJson, type)
 
             _passwords.value = loadedPasswords
-            Log.d(TAG, "✅ Loaded ${loadedPasswords.size} passwords from vault")
+            Log.d(TAG, "✅ Loaded ${loadedPasswords.size} passwords")
 
         } catch (e: Exception) {
             Log.e(TAG, "❌ Failed to load passwords: ${e.message}", e)
+            _passwords.value = emptyList()
         }
     }
 

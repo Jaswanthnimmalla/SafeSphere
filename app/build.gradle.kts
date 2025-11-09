@@ -129,6 +129,14 @@ dependencies {
     // AndroidX Biometric - for biometric authentication
     implementation("androidx.biometric:biometric:1.2.0-alpha05")
 
+    // QR Code generation - for desktop pairing
+    implementation("com.google.zxing:core:3.5.3")
+    implementation("com.journeyapps:zxing-android-embedded:4.3.0")
+
+    // NanoHTTPD - lightweight HTTP server for local network sync
+    implementation("org.nanohttpd:nanohttpd:2.3.1")
+    implementation("org.nanohttpd:nanohttpd-websocket:2.3.1")
+
     // CameraX - for secure in-app camera
     // REMOVED - Camera feature removed to reduce app size
     // implementation("androidx.camera:camera-core:1.3.1")

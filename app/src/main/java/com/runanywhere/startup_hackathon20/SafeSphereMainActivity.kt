@@ -8,6 +8,7 @@ import androidx.activity.enableEdgeToEdge
 import androidx.activity.viewModels
 import androidx.fragment.app.FragmentActivity
 import androidx.compose.animation.*
+import androidx.compose.animation.core.*
 import androidx.compose.foundation.*
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -22,6 +23,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
@@ -32,10 +34,14 @@ import androidx.compose.ui.zIndex
 import com.runanywhere.startup_hackathon20.data.*
 import com.runanywhere.startup_hackathon20.viewmodels.SafeSphereViewModel
 import com.runanywhere.startup_hackathon20.viewmodels.SafeSphereScreen
+import com.runanywhere.startup_hackathon20.viewmodels.AppNotification
+import com.runanywhere.startup_hackathon20.viewmodels.NotificationType
 import com.runanywhere.startup_hackathon20.ui.*
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.*
+import kotlin.compareTo
+import kotlin.div
 
 /**
  * SafeSphere - Privacy-First Mobile Application
@@ -56,6 +62,10 @@ class SafeSphereMainActivity : FragmentActivity() {
 
     private val viewModel: SafeSphereViewModel by viewModels()
 
+
+/**
+ * Main app container with navigation
+ */
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         
@@ -84,10 +94,124 @@ class SafeSphereMainActivity : FragmentActivity() {
 }
 
 /**
+ * Real-time Notification Popup
+ * Shows when a new notification arrives
+ */
+@Composable
+fun NotificationPopup(
+    notification: AppNotification,
+    onDismiss: () -> Unit,
+    onClick: () -> Unit
+) {
+    var visible by remember { mutableStateOf(true) }
+    
+    LaunchedEffect(notification) {
+        // Auto-dismiss after 5 seconds
+        kotlinx.coroutines.delay(5000)
+        visible = false
+        kotlinx.coroutines.delay(300) // Wait for animation
+        onDismiss()
+    }
+    
+    AnimatedVisibility(
+        visible = visible,
+        enter = slideInVertically(initialOffsetY = { -it }) + fadeIn(),
+        exit = slideOutVertically(targetOffsetY = { -it }) + fadeOut()
+    ) {
+        GlassCard(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp)
+                .clickable {
+                    visible = false
+                    onClick()
+                }
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(16.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                // Icon based on notification type
+                Box(
+                    modifier = Modifier
+                        .size(48.dp)
+                        .clip(CircleShape)
+                        .background(
+                            when (notification.type) {
+                                NotificationType.ERROR -> SafeSphereColors.Error.copy(alpha = 0.1f)
+                                NotificationType.INFO -> SafeSphereColors.Primary.copy(alpha = 0.1f)
+                                NotificationType.SUCCESS -> SafeSphereColors.Success.copy(alpha = 0.1f)
+                                NotificationType.WARNING -> SafeSphereColors.Warning.copy(alpha = 0.1f)
+                            }
+                        ),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = when (notification.type) {
+                            NotificationType.ERROR -> Icons.Filled.Warning
+                            NotificationType.INFO -> Icons.Filled.Info
+                            NotificationType.SUCCESS -> Icons.Filled.Check
+                            NotificationType.WARNING -> Icons.Filled.Warning
+                        },
+                        contentDescription = null,
+                        tint = when (notification.type) {
+                            NotificationType.ERROR -> SafeSphereColors.Error
+                            NotificationType.INFO -> SafeSphereColors.Primary
+                            NotificationType.SUCCESS -> SafeSphereColors.Success
+                            NotificationType.WARNING -> SafeSphereColors.Warning
+                        },
+                        modifier = Modifier.size(24.dp)
+                    )
+                }
+                
+                Spacer(modifier = Modifier.width(12.dp))
+                
+                Column(
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Text(
+                        text = notification.title,
+                        fontSize = 16.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = SafeSphereColors.TextPrimary
+                    )
+                    
+                    Spacer(modifier = Modifier.height(4.dp))
+                    
+                    Text(
+                        text = notification.message,
+                        fontSize = 14.sp,
+                        color = SafeSphereColors.TextSecondary,
+                        maxLines = 2
+                    )
+                }
+                
+                IconButton(
+                    onClick = {
+                        visible = false
+                        onDismiss()
+                    }
+                ) {
+                    Icon(
+                        imageVector = Icons.Filled.Close,
+                        contentDescription = "Dismiss",
+                        tint = SafeSphereColors.TextSecondary
+                    )
+                }
+            }
+        }
+    }
+}
+
+/**
  * Main app container with navigation
  */
 @Composable
-fun SafeSphereApp(viewModel: SafeSphereViewModel) {
+fun SafeSphereApp(
+    viewModel: SafeSphereViewModel
+) {
     // Splash screen state
     var showSplash by remember { mutableStateOf(true) }
 
@@ -103,10 +227,14 @@ fun SafeSphereApp(viewModel: SafeSphereViewModel) {
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun MainAppContent(viewModel: SafeSphereViewModel) {
+fun MainAppContent(
+    viewModel: SafeSphereViewModel
+) {
     val currentScreen by viewModel.currentScreen.collectAsState()
     val currentUser by viewModel.currentUser.collectAsState()
     val uiMessage by viewModel.uiMessage.collectAsState()
+    val unreadCount by viewModel.unreadNotificationCount.collectAsState()
+    val latestNotification by viewModel.latestNotification.collectAsState()
     val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
     val scope = rememberCoroutineScope()
 
@@ -130,6 +258,7 @@ fun MainAppContent(viewModel: SafeSphereViewModel) {
     var wasInBackground by remember {
         mutableStateOf(prefs.getBoolean("app_in_background", false))
     }
+
 
     // Re-read values on every composition to stay fresh
     LaunchedEffect(Unit) {
@@ -339,7 +468,8 @@ fun MainAppContent(viewModel: SafeSphereViewModel) {
                                     },
                                     onNotificationClick = {
                                         viewModel.navigateToScreen(SafeSphereScreen.NOTIFICATIONS)
-                                    }
+                                    },
+                                    unreadCount = unreadCount
                                 )
                             },
                             bottomBar = {
@@ -353,22 +483,34 @@ fun MainAppContent(viewModel: SafeSphereViewModel) {
                                     .padding(paddingValues)
                             ) {
                                 when (currentScreen) {
-                                    SafeSphereScreen.DASHBOARD -> DashboardScreen(viewModel)
-                                    SafeSphereScreen.PRIVACY_VAULT -> PrivacyVaultScreen(viewModel)
-                                    SafeSphereScreen.PASSWORDS -> PasswordsScreen(viewModel)
-                                    SafeSphereScreen.AI_CHAT -> AIChatScreen(viewModel)
-                                    SafeSphereScreen.DATA_MAP -> DataMapScreen(viewModel)
-                                    SafeSphereScreen.THREAT_SIMULATION -> ThreatSimulationScreen(
+                                    SafeSphereScreen.DASHBOARD -> EnhancedDashboardScreen(viewModel)
+                                    SafeSphereScreen.PRIVACY_VAULT -> EnhancedPrivacyVaultScreen(
+                                        viewModel
+                                    )
+                                    SafeSphereScreen.PASSWORDS -> EnhancedPasswordsScreen(viewModel)
+                                    SafeSphereScreen.AI_CHAT -> EnhancedAIChatScreen(viewModel)
+                                    SafeSphereScreen.DATA_MAP -> AdvancedDataMapScreen(viewModel)
+                                    SafeSphereScreen.THREAT_SIMULATION -> AdvancedThreatSimulationScreen(
                                         viewModel
                                     )
 
-                                    SafeSphereScreen.SETTINGS -> SettingsScreen(viewModel)
-                                    SafeSphereScreen.MODELS -> ModelsScreen(viewModel)
+                                    SafeSphereScreen.SETTINGS -> EnhancedSettingsScreen(viewModel)
+                                    SafeSphereScreen.MODELS -> EnhancedModelsScreen(viewModel)
                                     SafeSphereScreen.NOTIFICATIONS -> NotificationsScreen(viewModel)
-                                    SafeSphereScreen.PASSWORD_HEALTH -> PasswordHealthScreen(
-                                        viewModel = viewModel,
-                                        onNavigateBack = { viewModel.navigateBack() }
+                                    SafeSphereScreen.PASSWORD_HEALTH -> EnhancedPasswordHealthScreen(
+                                        viewModel = viewModel
                                     )
+                                    SafeSphereScreen.AI_PREDICTOR -> AIPredictorScreen(viewModel)
+
+                                    SafeSphereScreen.VOICE_ASSISTANT -> VoiceAssistantScreen(
+                                        viewModel
+                                    )
+                                    
+                                    SafeSphereScreen.DESKTOP_SYNC -> DesktopSyncScreen(viewModel)
+
+                                    SafeSphereScreen.ABOUT_US -> AboutUsScreen(viewModel)
+                                    SafeSphereScreen.BLOGS -> BlogsScreen(viewModel)
+                                    SafeSphereScreen.CONTACT_US -> ContactUsScreen(viewModel)
 
                                     else -> {}
                                 }
@@ -377,6 +519,30 @@ fun MainAppContent(viewModel: SafeSphereViewModel) {
                     }
                 }
             }
+
+            // Show real-time notification popup
+            latestNotification?.let { notification ->
+                if (!notification.isRead) {
+                    Box(
+                        modifier = Modifier
+                            .align(Alignment.TopCenter)
+                            .padding(top = 80.dp) // Below the top bar
+                            .zIndex(20f)
+                    ) {
+                        NotificationPopup(
+                            notification = notification,
+                            onDismiss = {
+                                viewModel.markNotificationAsRead(notification.id)
+                            },
+                            onClick = {
+                                viewModel.markNotificationAsRead(notification.id)
+                                viewModel.navigateToScreen(SafeSphereScreen.NOTIFICATIONS)
+                            }
+                        )
+                    }
+                }
+            }
+
 
             // Show UI messages as snackbar
             uiMessage?.let { message ->
@@ -542,6 +708,7 @@ fun BiometricLockScreen(
     }
 }
 
+
 /**
  * Beautiful Top Bar with Gradient Title
  */
@@ -549,7 +716,8 @@ fun BiometricLockScreen(
 fun BeautifulTopBar(
     title: String,
     onMenuClick: () -> Unit,
-    onNotificationClick: () -> Unit
+    onNotificationClick: () -> Unit,
+    unreadCount: Int = 0
 ) {
     Surface(
         modifier = Modifier
@@ -620,33 +788,29 @@ fun BeautifulTopBar(
                 )
 
                 // Right: Notification button
-                IconButton(
-                    onClick = onNotificationClick,
-                    modifier = Modifier
-                        .size(48.dp)
-                        .clip(CircleShape)
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .size(40.dp)
-                            .clip(CircleShape)
-                            .background(SafeSphereColors.Primary.copy(alpha = 0.1f)),
-                        contentAlignment = Alignment.Center
+                Box {
+                    IconButton(
+                        onClick = onNotificationClick,
+                        modifier = Modifier.size(48.dp)
                     ) {
                         Icon(
-                            imageVector = Icons.Filled.Notifications,
+                            imageVector = Icons.Default.Notifications,
                             contentDescription = "Notifications",
-                            tint = SafeSphereColors.Primary,
-                            modifier = Modifier.size(24.dp)
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(28.dp)
                         )
-                        // Notification badge
-                        Box(
+                    }
+
+                    // Notification count - larger and more prominent
+                    if (unreadCount > 0) {
+                        Text(
+                            text = if (unreadCount > 99) "99+" else unreadCount.toString(),
+                            color = Color.Red,
+                            fontSize = 18.sp,
+                            fontWeight = FontWeight.Bold,
                             modifier = Modifier
-                                .size(8.dp)
                                 .align(Alignment.TopEnd)
-                                .offset(x = (-4).dp, y = 4.dp)
-                                .clip(CircleShape)
-                                .background(SafeSphereColors.Error)
+                                .offset(x = (-2).dp, y = 4.dp)
                         )
                     }
                 }
@@ -877,6 +1041,12 @@ fun getScreenTitle(screen: SafeSphereScreen): String {
         SafeSphereScreen.MODELS -> "AI Models"
         SafeSphereScreen.NOTIFICATIONS -> "Notifications"
         SafeSphereScreen.PASSWORD_HEALTH -> "Password Health"
+        SafeSphereScreen.AI_PREDICTOR -> "AI Predictor"
+        SafeSphereScreen.VOICE_ASSISTANT -> "Voice Assistant"
+        SafeSphereScreen.DESKTOP_SYNC -> "Desktop Sync"
+        SafeSphereScreen.ABOUT_US -> "About Us"
+        SafeSphereScreen.BLOGS -> "Blog"
+        SafeSphereScreen.CONTACT_US -> "Contact"
         else -> "SafeSphere"
     }
 }
@@ -1105,6 +1275,10 @@ fun DashboardScreen(viewModel: SafeSphereViewModel) {
             .padding(16.dp)
     ) {
         // Security Score Card
+        // Security Score Card - CENTERED VERSION
+// Copy this entire section to replace the existing Security Score Card in SafeSphereMainActivity.kt
+// Location: Around line 1215-1260
+
         GlassCard(
             modifier = Modifier.fillMaxWidth()
         ) {
@@ -1120,7 +1294,9 @@ fun DashboardScreen(viewModel: SafeSphereViewModel) {
 
                 Spacer(modifier = Modifier.height(12.dp))
 
+                // ✅ FIXED: Added .fillMaxWidth() to center the circle
                 Box(
+                    modifier = Modifier.fillMaxWidth(),  // ← THIS IS THE FIX
                     contentAlignment = Alignment.Center
                 ) {
                     CircularProgressIndicator(
@@ -1152,6 +1328,16 @@ fun DashboardScreen(viewModel: SafeSphereViewModel) {
                 )
             }
         }
+
+        /*
+        INSTRUCTIONS:
+        1. Open SafeSphereMainActivity.kt
+        2. Find "// Security Score Card" (around line 1215)
+        3. Select the entire GlassCard block for Security Score
+        4. Replace it with the code above
+        5. Build: ./gradlew assembleDebug
+        6. The circle will now be centered!
+        */
 
         Spacer(modifier = Modifier.height(16.dp))
         
@@ -1279,6 +1465,7 @@ fun DashboardScreen(viewModel: SafeSphereViewModel) {
                                     fontSize = 12.sp,
                                     color = SafeSphereColors.TextSecondary
                                 )
+
                             }
                         }
 
@@ -1342,6 +1529,11 @@ fun DashboardScreen(viewModel: SafeSphereViewModel) {
         ) {
             // Password Manager Quick Access Card is positioned above the grid below
 
+            // AI Predictor Card - FEATURED! Full width at top
+            FeaturedAIPredictorDashboardCard(
+                onClick = { viewModel.navigateToScreen(SafeSphereScreen.AI_PREDICTOR) }
+            )
+
             Row(
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
                 modifier = Modifier.fillMaxWidth()
@@ -1390,7 +1582,7 @@ fun DashboardScreen(viewModel: SafeSphereViewModel) {
 
             DashboardCard(
                 title = "Manage AI Models",
-                icon = "🤖",
+                icon = "🧠",
                 description = "Download offline AI",
                 color = SafeSphereColors.Info,
                 onClick = { viewModel.navigateToScreen(SafeSphereScreen.MODELS) },
@@ -1570,6 +1762,110 @@ fun DashboardCard(
                     fontSize = 12.sp,
                     color = SafeSphereColors.TextSecondary
                 )
+            }
+        }
+    }
+}
+
+/**
+ * Featured AI Predictor Card - more prominent at top of Quick Access
+ */
+@Composable
+fun FeaturedAIPredictorDashboardCard(onClick: () -> Unit) {
+    GlassCard(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(140.dp)
+            .border(
+                width = 2.dp,
+                color = Color(0xFF9C27B0),
+                shape = RoundedCornerShape(18.dp)
+            )
+            .clickable(onClick = onClick)
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(
+                    Brush.linearGradient(
+                        colors = listOf(
+                            Color(0xFF9C27B0).copy(alpha = 0.1f),
+                            Color(0xFF7B1FA2).copy(alpha = 0.05f),
+                            Color.Transparent
+                        )
+                    )
+                )
+                .padding(20.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxSize(),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                // Icon
+                Box(
+                    modifier = Modifier
+                        .size(64.dp)
+                        .clip(CircleShape)
+                        .background(Color(0xFF9C27B0).copy(alpha = 0.15f)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = "🤖",
+                        fontSize = 36.sp
+                    )
+                }
+
+                Spacer(modifier = Modifier.width(16.dp))
+
+                Column(
+                    modifier = Modifier.weight(1f),
+                    verticalArrangement = Arrangement.Center
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Text(
+                            text = "AI Security Predictor",
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 19.sp,
+                            color = Color(0xFF9C27B0)
+                        )
+
+                        // Featured badge
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(6.dp))
+                                .background(Color(0xFF9C27B0))
+                                .padding(horizontal = 8.dp, vertical = 2.dp)
+                        ) {
+                            Text(
+                                text = "NEW",
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.Black,
+                                color = Color.White,
+                                letterSpacing = 0.5.sp
+                            )
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(6.dp))
+
+                    Text(
+                        text = "Predict future security risks with ML",
+                        fontSize = 14.sp,
+                        color = SafeSphereColors.TextPrimary,
+                        fontWeight = FontWeight.Medium
+                    )
+
+                    Spacer(modifier = Modifier.height(4.dp))
+
+                    Text(
+                        text = "🔮 See risk 30 & 90 days ahead • 🎯 Breach probability",
+                        fontSize = 12.sp,
+                        color = SafeSphereColors.TextSecondary
+                    )
+                }
             }
         }
     }

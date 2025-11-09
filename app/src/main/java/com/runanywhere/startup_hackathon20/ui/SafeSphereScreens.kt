@@ -799,6 +799,13 @@ fun SettingsScreen(viewModel: SafeSphereViewModel) {
         )
     }
 
+    var isVoiceControlEnabled by remember {
+        mutableStateOf(
+            context.getSharedPreferences("safesphere_prefs", android.content.Context.MODE_PRIVATE)
+                .getBoolean("voice_control_enabled", false)
+        )
+    }
+
     val biometricAvailable = remember {
         com.runanywhere.startup_hackathon20.security.BiometricAuthManager.isBiometricAvailable(
             context
@@ -900,6 +907,41 @@ fun SettingsScreen(viewModel: SafeSphereViewModel) {
                                     )
                                     isBiometricEnabled = false
                                 }
+                            }
+                        }
+                    )
+
+                    SettingToggle(
+                        label = "Voice Control",
+                        description = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.M) {
+                            val hasPermission =
+                                androidx.core.content.ContextCompat.checkSelfPermission(
+                                    context,
+                                    android.Manifest.permission.RECORD_AUDIO
+                                ) == android.content.pm.PackageManager.PERMISSION_GRANTED
+
+                            if (hasPermission) {
+                                "Enable voice commands for SafeSphere (8 languages supported)"
+                            } else {
+                                "Enable voice commands - Will request microphone permission"
+                            }
+                        } else {
+                            "Enable voice commands for SafeSphere"
+                        },
+                        enabled = isVoiceControlEnabled,
+                        onToggle = { enabled ->
+                            val prefs = context.getSharedPreferences(
+                                "safesphere_prefs",
+                                android.content.Context.MODE_PRIVATE
+                            )
+                            prefs.edit().putBoolean("voice_control_enabled", enabled).apply()
+                            isVoiceControlEnabled = enabled
+
+                            if (enabled) {
+                                // Permission will be requested by MainActivity
+                                android.util.Log.d("Settings", "Voice Control enabled")
+                            } else {
+                                android.util.Log.d("Settings", "Voice Control disabled")
                             }
                         }
                     )
@@ -1245,9 +1287,24 @@ fun ModelCard(
 // Utility functions
 fun formatBytes(bytes: Long): String {
     return when {
+        bytes == 0L -> "0 B"
         bytes < 1024 -> "$bytes B"
-        bytes < 1024 * 1024 -> "${bytes / 1024} KB"
-        bytes < 1024 * 1024 * 1024 -> "${bytes / (1024 * 1024)} MB"
-        else -> "${bytes / (1024 * 1024 * 1024)} GB"
+        bytes < 1024 * 1024 -> {
+            val kb = bytes / 1024.0
+            if (kb < 10) String.format("%.1f KB", kb)
+            else "${kb.toInt()} KB"
+        }
+
+        bytes < 1024 * 1024 * 1024 -> {
+            val mb = bytes / (1024.0 * 1024)
+            if (mb < 10) String.format("%.1f MB", mb)
+            else "${mb.toInt()} MB"
+        }
+
+        else -> {
+            val gb = bytes / (1024.0 * 1024 * 1024)
+            if (gb < 10) String.format("%.1f GB", gb)
+            else "${gb.toInt()} GB"
+        }
     }
 }

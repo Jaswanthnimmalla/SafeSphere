@@ -1,3 +1,4 @@
 <resources>
     <string name="app_name">SafeSphere</string>
+    <string name="autofill_service_description">SafeSphere securely autofills your passwords in apps and websites. Your data never leaves your device.</string>
 </resources>

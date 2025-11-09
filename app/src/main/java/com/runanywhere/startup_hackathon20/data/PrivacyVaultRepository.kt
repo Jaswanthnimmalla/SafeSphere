@@ -24,7 +24,7 @@ import java.io.File
  *
  * This is the core data privacy layer of SafeSphere
  */
-class PrivacyVaultRepository(private val context: Context) {
+class PrivacyVaultRepository private constructor(private val context: Context) {
 
     private val gson = Gson()
     private val vaultFile = File(context.filesDir, "safesphere_vault.json")
@@ -57,7 +57,10 @@ class PrivacyVaultRepository(private val context: Context) {
     private fun loadVaultItems() {
         try {
             if (!vaultFile.exists()) {
-                Log.d(TAG, "Vault file doesn't exist, initializing empty vault")
+                Log.d(
+                    TAG,
+                    "Vault file doesn't exist, initializing empty vault"
+                )
                 _vaultItems.value = emptyList()
                 return
             }

@@ -21,6 +21,8 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusDirection
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
@@ -58,7 +60,7 @@ fun LoginScreen(
     var loginCredentials by remember { mutableStateOf<Pair<String, String>?>(null) }
     var loggedInUser by remember { mutableStateOf<User?>(null) }
 
-    val context = androidx.compose.ui.platform.LocalContext.current
+    val context = LocalContext.current
     val activity = context as? androidx.fragment.app.FragmentActivity
     val focusManager = LocalFocusManager.current
     val coroutineScope = rememberCoroutineScope()
@@ -68,6 +70,10 @@ fun LoginScreen(
     var showBiometricPrompt by remember { mutableStateOf(false) }
     var biometricExhausted by remember { mutableStateOf(false) }
     val maxBiometricAttempts = 5
+
+    // Authentication method tracking
+    var authMethod by remember { mutableStateOf(AuthMethod.BIOMETRIC_AUTO) }
+    var firstBiometricSuccess by remember { mutableStateOf(false) }
 
     // Check if biometric should auto-trigger on app open
     val isBiometricEnabled = remember {
@@ -94,25 +100,37 @@ fun LoginScreen(
             BiometricAuthManager.authenticate(
                 activity = activity,
                 title = "Unlock SafeSphere",
-                subtitle = "Attempt $biometricAttempts of $maxBiometricAttempts",
+                subtitle = if (firstBiometricSuccess) "Second verification required" else "Attempt $biometricAttempts of $maxBiometricAttempts",
                 negativeButtonText = "Use Password",
                 onSuccess = {
-                    // Biometric success - login with saved credentials
-                    coroutineScope.launch {
-                        val credentials = BiometricAuthManager.getSavedCredentials(context)
-                        if (credentials != null) {
-                            val (savedEmail, savedPassword) = credentials
-                            isLoading = true
-                            val result = onLogin(LoginCredentials(savedEmail, savedPassword))
-                            isLoading = false
+                    // Check if this is first or second biometric attempt
+                    if (authMethod == AuthMethod.BIOMETRIC_AUTO && !firstBiometricSuccess) {
+                        // First biometric success - trigger second verification
+                        firstBiometricSuccess = true
+                        errorMessage = "First verification successful. Please verify again."
+                        coroutineScope.launch {
+                            delay(1000) // Brief delay before second prompt
+                            showBiometricPrompt = true
+                        }
+                    } else {
+                        // Second biometric success OR credential-based biometric - login
+                        coroutineScope.launch {
+                            val credentials = BiometricAuthManager.getSavedCredentials(context)
+                            if (credentials != null) {
+                                val (savedEmail, savedPassword) = credentials
+                                isLoading = true
+                                val result = onLogin(LoginCredentials(savedEmail, savedPassword))
+                                isLoading = false
 
-                            when (result) {
-                                is AuthResult.Success -> {
-                                    onNavigateToDashboard()
-                                }
-                                is AuthResult.Error -> {
-                                    errorMessage = result.message
-                                    biometricExhausted = true
+                                when (result) {
+                                    is AuthResult.Success -> {
+                                        onNavigateToDashboard()
+                                    }
+
+                                    is AuthResult.Error -> {
+                                        errorMessage = result.message
+                                        biometricExhausted = true
+                                    }
                                 }
                             }
                         }
@@ -398,6 +416,9 @@ fun LoginScreen(
                                 isLoading = true
                                 errorMessage = null
 
+                                // Set auth method to credential login (1 biometric)
+                                authMethod = AuthMethod.CREDENTIAL_LOGIN
+
                                 // Perform login
                                 coroutineScope.launch {
                                     val result = onLogin(LoginCredentials(email, password))
@@ -405,6 +426,31 @@ fun LoginScreen(
 
                                     when (result) {
                                         is AuthResult.Success -> {
+                                            // Login successful - now ask for biometric once
+                                            if (activity != null) {
+                                                BiometricAuthManager.authenticate(
+                                                    activity = activity,
+                                                    title = "Verify Identity",
+                                                    subtitle = "Use biometric to proceed to dashboard",
+                                                    negativeButtonText = "Skip",
+                                                    onSuccess = {
+                                                        // Biometric success - navigate to dashboard
+                                                        onNavigateToDashboard()
+                                                    },
+                                                    onError = { errorCode, errString ->
+                                                        // Allow user to proceed even if biometric fails
+                                                        onNavigateToDashboard()
+                                                    },
+                                                    onFailed = {
+                                                        // Allow user to proceed even if biometric fails
+                                                        onNavigateToDashboard()
+                                                    }
+                                                )
+                                            } else {
+                                                // No biometric available, go directly to dashboard
+                                                onNavigateToDashboard()
+                                            }
+
                                             // Check if biometric is available and not yet enabled
                                             val biometricAvailable =
                                                 BiometricAuthManager.isBiometricAvailable(context)
@@ -426,13 +472,22 @@ fun LoginScreen(
                                             }
 
                                             if (!alreadySaved) {
-                                                // Show save credentials dialog
-                                                loggedInUser = result.user
-                                                loginCredentials = Pair(email, password)
-                                                showSaveCredentialsDialog = true
-                                            } else {
-                                                // Credentials already saved, navigate to dashboard
-                                                onNavigateToDashboard()
+                                                // Save credentials silently without dialog
+                                                launch(Dispatchers.IO) {
+                                                    try {
+                                                        val passwordRepo = PasswordVaultRepository.getInstance(context)
+                                                        passwordRepo.savePassword(
+                                                            service = "SafeSphere App",
+                                                            username = email,
+                                                            password = password,
+                                                            url = "com.runanywhere.startup_hackathon20",
+                                                            category = PasswordCategory.OTHER,
+                                                            notes = "SafeSphere login credentials"
+                                                        )
+                                                    } catch (e: Exception) {
+                                                        // Ignore errors
+                                                    }
+                                                }
                                             }
                                         }
 
@@ -645,7 +700,7 @@ fun RegisterScreen(
     var registeredUser by remember { mutableStateOf<User?>(null) }
     var registrationCredentials by remember { mutableStateOf<Pair<String, String>?>(null) }
 
-    val context = androidx.compose.ui.platform.LocalContext.current
+    val context = LocalContext.current
     val focusManager = LocalFocusManager.current
     val coroutineScope = rememberCoroutineScope()
 
@@ -1172,7 +1227,7 @@ fun AuthTextField(
     onValueChange: (String) -> Unit,
     label: String,
     placeholder: String,
-    leadingIcon: androidx.compose.ui.graphics.vector.ImageVector,
+    leadingIcon: ImageVector,
     modifier: Modifier = Modifier,
     trailingIcon: String? = null,
     onTrailingIconClick: (() -> Unit)? = null,
@@ -1286,4 +1341,9 @@ fun calculatePasswordStrength(password: String): PasswordStrengthResult {
         4 -> PasswordStrengthResult(4, "Strong password", SafeSphereColors.Success)
         else -> PasswordStrengthResult(1, "Weak password", SafeSphereColors.Error)
     }
+}
+
+enum class AuthMethod {
+    BIOMETRIC_AUTO,
+    CREDENTIAL_LOGIN
 }
