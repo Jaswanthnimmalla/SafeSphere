@@ -14,7 +14,6 @@ import android.view.autofill.AutofillId
 import android.view.autofill.AutofillValue
 import android.widget.RemoteViews
 import androidx.annotation.RequiresApi
-import com.runanywhere.startup_hackathon20.R
 import com.runanywhere.startup_hackathon20.data.PasswordCategory
 import com.runanywhere.startup_hackathon20.data.PasswordVaultEntry
 import com.runanywhere.startup_hackathon20.data.PasswordVaultRepository

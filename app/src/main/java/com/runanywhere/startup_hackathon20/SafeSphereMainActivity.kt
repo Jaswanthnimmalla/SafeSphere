@@ -98,8 +98,8 @@ class SafeSphereMainActivity : FragmentActivity() {
 }
 
 /**
- * Real-time Notification Popup
- * Shows when a new notification arrives
+ * Enhanced Real-time Notification Popup with Colorful Borders
+ * Shows when a new notification arrives with high visibility
  */
 @Composable
 fun NotificationPopup(
@@ -109,7 +109,22 @@ fun NotificationPopup(
 ) {
     val colors = SafeSphereThemeColors
     var visible by remember { mutableStateOf(true) }
-    
+
+    // Get colors based on notification type
+    val notificationColor = when (notification.type) {
+        NotificationType.ERROR -> Color(0xFFE53935) // Vibrant Red
+        NotificationType.INFO -> Color(0xFF1E88E5) // Vibrant Blue
+        NotificationType.SUCCESS -> Color(0xFF43A047) // Vibrant Green
+        NotificationType.WARNING -> Color(0xFFFFB300) // Vibrant Orange
+    }
+
+    val notificationIcon = when (notification.type) {
+        NotificationType.ERROR -> "⚠️"
+        NotificationType.INFO -> "ℹ️"
+        NotificationType.SUCCESS -> "✅"
+        NotificationType.WARNING -> "⚠️"
+    }
+
     LaunchedEffect(notification) {
         // Auto-dismiss after 5 seconds
         kotlinx.coroutines.delay(5000)
@@ -120,91 +135,148 @@ fun NotificationPopup(
     
     AnimatedVisibility(
         visible = visible,
-        enter = slideInVertically(initialOffsetY = { -it }) + fadeIn(),
-        exit = slideOutVertically(targetOffsetY = { -it }) + fadeOut()
+        enter = slideInVertically(initialOffsetY = { -it }) + fadeIn() + expandVertically(),
+        exit = slideOutVertically(targetOffsetY = { -it }) + fadeOut() + shrinkVertically()
     ) {
-        GlassCard(
+        Card(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(16.dp)
+                .padding(horizontal = 12.dp, vertical = 8.dp)
                 .clickable {
                     visible = false
                     onClick()
-                }
+                },
+            shape = RoundedCornerShape(20.dp),
+            colors = CardDefaults.cardColors(
+                containerColor = colors.surface
+            ),
+            elevation = CardDefaults.cardElevation(
+                defaultElevation = 12.dp
+            )
         ) {
-            Row(
+            Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(16.dp),
-                verticalAlignment = Alignment.CenterVertically
+                    .border(
+                        width = 3.dp,
+                        brush = Brush.horizontalGradient(
+                            colors = listOf(
+                                notificationColor,
+                                notificationColor.copy(alpha = 0.7f),
+                                notificationColor
+                            )
+                        ),
+                        shape = RoundedCornerShape(20.dp)
+                    )
+                    .background(
+                        Brush.verticalGradient(
+                            colors = listOf(
+                                notificationColor.copy(alpha = 0.15f),
+                                colors.surface
+                            )
+                        )
+                    )
             ) {
-                // Icon based on notification type
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(16.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    // Large colorful icon
+                    Box(
+                        modifier = Modifier
+                            .size(64.dp)
+                            .clip(CircleShape)
+                            .background(
+                                Brush.radialGradient(
+                                    colors = listOf(
+                                        notificationColor.copy(alpha = 0.25f),
+                                        notificationColor.copy(alpha = 0.08f)
+                                    )
+                                )
+                            )
+                            .border(
+                                width = 2.dp,
+                                color = notificationColor,
+                                shape = CircleShape
+                            ),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = notificationIcon,
+                            fontSize = 36.sp
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.width(16.dp))
+
+                    Column(
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        // Title with color accent
+                        Text(
+                            text = notification.title,
+                            fontSize = 17.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = notificationColor
+                        )
+
+                        Spacer(modifier = Modifier.height(6.dp))
+
+                        // Message text
+                        Text(
+                            text = notification.message,
+                            fontSize = 14.sp,
+                            color = colors.textPrimary,
+                            lineHeight = 20.sp,
+                            maxLines = 3
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.width(8.dp))
+
+                    // Close button
+                    IconButton(
+                        onClick = {
+                            visible = false
+                            onDismiss()
+                        },
+                        modifier = Modifier.size(40.dp)
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(32.dp)
+                                .clip(CircleShape)
+                                .background(notificationColor.copy(alpha = 0.1f)),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.Filled.Close,
+                                contentDescription = "Dismiss",
+                                tint = notificationColor,
+                                modifier = Modifier.size(20.dp)
+                            )
+                        }
+                    }
+                }
+
+                // Bottom colored strip
                 Box(
                     modifier = Modifier
-                        .size(48.dp)
-                        .clip(CircleShape)
+                        .fillMaxWidth()
+                        .height(6.dp)
+                        .align(Alignment.BottomCenter)
                         .background(
-                            when (notification.type) {
-                                NotificationType.ERROR -> colors.error.copy(alpha = 0.1f)
-                                NotificationType.INFO -> colors.primary.copy(alpha = 0.1f)
-                                NotificationType.SUCCESS -> colors.success.copy(alpha = 0.1f)
-                                NotificationType.WARNING -> colors.warning.copy(alpha = 0.1f)
-                            }
-                        ),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(
-                        imageVector = when (notification.type) {
-                            NotificationType.ERROR -> Icons.Filled.Warning
-                            NotificationType.INFO -> Icons.Filled.Info
-                            NotificationType.SUCCESS -> Icons.Filled.Check
-                            NotificationType.WARNING -> Icons.Filled.Warning
-                        },
-                        contentDescription = null,
-                        tint = when (notification.type) {
-                            NotificationType.ERROR -> colors.error
-                            NotificationType.INFO -> colors.primary
-                            NotificationType.SUCCESS -> colors.success
-                            NotificationType.WARNING -> colors.warning
-                        },
-                        modifier = Modifier.size(24.dp)
-                    )
-                }
-                
-                Spacer(modifier = Modifier.width(12.dp))
-                
-                Column(
-                    modifier = Modifier.weight(1f)
-                ) {
-                    Text(
-                        text = notification.title,
-                        fontSize = 16.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = colors.textPrimary
-                    )
-                    
-                    Spacer(modifier = Modifier.height(4.dp))
-                    
-                    Text(
-                        text = notification.message,
-                        fontSize = 14.sp,
-                        color = colors.textSecondary,
-                        maxLines = 2
-                    )
-                }
-                
-                IconButton(
-                    onClick = {
-                        visible = false
-                        onDismiss()
-                    }
-                ) {
-                    Icon(
-                        imageVector = Icons.Filled.Close,
-                        contentDescription = "Dismiss",
-                        tint = colors.textSecondary
-                    )
-                }
+                            Brush.horizontalGradient(
+                                colors = listOf(
+                                    notificationColor.copy(alpha = 0.3f),
+                                    notificationColor,
+                                    notificationColor.copy(alpha = 0.3f)
+                                )
+                            )
+                        )
+                )
             }
         }
     }
