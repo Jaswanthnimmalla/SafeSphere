@@ -1,7 +1,6 @@
 package com.runanywhere.startup_hackathon20.ui
 
 import androidx.compose.animation.core.*
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
@@ -20,13 +19,14 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.runanywhere.startup_hackathon20.utils.PasswordAnalyzer
 import com.runanywhere.startup_hackathon20.viewmodels.SafeSphereViewModel
 import com.runanywhere.startup_hackathon20.viewmodels.SafeSphereScreen
 
 /**
- * Password Health Analyzer Screen
- * Shows comprehensive password security analysis
+ * Password Health Analyzer Screen - Dark Theme
+ * Shows comprehensive password security analysis with SafeSphere styling
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -44,13 +44,11 @@ fun PasswordHealthScreen(
         isAnalyzing = true
         try {
             healthReport = PasswordAnalyzer.analyzePasswords(vaultItems) { encryptedContent ->
-                // PROPER DECRYPTION using SecurityManager
                 try {
                     com.runanywhere.startup_hackathon20.security.SecurityManager.decrypt(
                         encryptedContent
                     )
                 } catch (e: Exception) {
-                    // Fallback to encrypted content if decryption fails
                     encryptedContent
                 }
             }
@@ -62,46 +60,48 @@ fun PasswordHealthScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("🔐 Password Health") },
+                title = { Text("🔐 Password Health", color = SafeSphereColors.TextPrimary) },
                 navigationIcon = {
                     IconButton(onClick = onNavigateBack) {
-                        Icon(Icons.Default.ArrowBack, "Back")
+                        Icon(Icons.Default.ArrowBack, "Back", tint = SafeSphereColors.Primary)
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.primaryContainer
+                    containerColor = SafeSphereColors.Surface
                 )
             )
-        }
+        },
+        containerColor = SafeSphereColors.Background
     ) { padding ->
         if (isAnalyzing) {
             Box(
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(padding),
+                    .padding(padding)
+                    .background(SafeSphereColors.Background),
                 contentAlignment = Alignment.Center
             ) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    CircularProgressIndicator()
+                    CircularProgressIndicator(color = SafeSphereColors.Primary)
                     Spacer(modifier = Modifier.height(16.dp))
-                    Text("Analyzing passwords...")
+                    Text("Analyzing passwords...", color = SafeSphereColors.TextPrimary)
                 }
             }
         } else if (healthReport == null) {
             Box(
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(padding),
+                    .padding(padding)
+                    .background(SafeSphereColors.Background),
                 contentAlignment = Alignment.Center
             ) {
-                Text("No password data available")
+                Text("No password data available", color = SafeSphereColors.TextSecondary)
             }
         } else {
             PasswordHealthContent(
                 report = healthReport!!,
                 viewModel = viewModel,
                 onFixPassword = { passwordDetail ->
-                    // Generate new strong password and update vault item
                     val newPassword = PasswordAnalyzer.generateStrongPassword()
                     viewModel.updateVaultItem(
                         id = passwordDetail.itemId,
@@ -129,6 +129,7 @@ private fun PasswordHealthContent(
     LazyColumn(
         modifier = modifier
             .fillMaxSize()
+            .background(SafeSphereColors.Background)
             .padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
@@ -148,8 +149,9 @@ private fun PasswordHealthContent(
         item {
             Text(
                 text = "Password Details (${report.totalPasswords} total)",
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Bold
+                fontSize = 18.sp,
+                fontWeight = FontWeight.Bold,
+                color = SafeSphereColors.TextPrimary
             )
         }
 
@@ -164,70 +166,88 @@ private fun PasswordHealthContent(
 }
 
 /**
- * Health Score Card - Large visual score display
+ * Health Score Card - Dark Theme with Glass Effect
  */
 @Composable
 private fun HealthScoreCard(score: Int) {
     val (color, label, emoji) = when {
-        score >= 85 -> Triple(Color(0xFF388E3C), "Excellent", "🎉")
+        score >= 85 -> Triple(SafeSphereColors.Success, "Excellent", "🎉")
         score >= 70 -> Triple(Color(0xFF7CB342), "Good", "✅")
-        score >= 50 -> Triple(Color(0xFFFBC02D), "Fair", "⚠️")
+        score >= 50 -> Triple(SafeSphereColors.Warning, "Fair", "⚠️")
         score >= 30 -> Triple(Color(0xFFF57C00), "Poor", "🔴")
-        else -> Triple(Color(0xFFD32F2F), "Critical", "🚨")
+        else -> Triple(SafeSphereColors.Error, "Critical", "🚨")
     }
 
     Card(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier
+            .fillMaxWidth()
+            .border(
+                width = 2.dp,
+                brush = Brush.horizontalGradient(
+                    colors = listOf(
+                        SafeSphereColors.Primary.copy(alpha = 0.5f),
+                        SafeSphereColors.Secondary.copy(alpha = 0.5f)
+                    )
+                ),
+                shape = RoundedCornerShape(20.dp)
+            ),
         colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.primaryContainer
+            containerColor = SafeSphereColors.Surface
         ),
-        elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
+        elevation = CardDefaults.cardElevation(defaultElevation = 8.dp),
+        shape = RoundedCornerShape(20.dp)
     ) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(24.dp),
+                .background(
+                    Brush.verticalGradient(
+                        colors = listOf(
+                            SafeSphereColors.Primary.copy(alpha = 0.1f),
+                            Color.Transparent
+                        )
+                    )
+                )
+                .padding(32.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             Text(
                 text = emoji,
-                style = MaterialTheme.typography.displayLarge
+                fontSize = 64.sp
             )
 
             Spacer(modifier = Modifier.height(16.dp))
 
-            // Animated score
             Text(
                 text = "$score",
-                style = MaterialTheme.typography.displayLarge,
+                fontSize = 56.sp,
                 fontWeight = FontWeight.Bold,
                 color = color
             )
 
             Text(
                 text = "/ 100",
-                style = MaterialTheme.typography.titleMedium,
-                color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.6f)
+                fontSize = 20.sp,
+                color = SafeSphereColors.TextSecondary
             )
 
-            Spacer(modifier = Modifier.height(8.dp))
+            Spacer(modifier = Modifier.height(16.dp))
 
-            // Progress bar
             LinearProgressIndicator(
-                progress = score / 100f,
+                progress = { score / 100f },
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(8.dp)
-                    .clip(RoundedCornerShape(4.dp)),
+                    .height(12.dp)
+                    .clip(RoundedCornerShape(6.dp)),
                 color = color,
-                trackColor = MaterialTheme.colorScheme.surfaceVariant
+                trackColor = SafeSphereColors.SurfaceVariant
             )
 
-            Spacer(modifier = Modifier.height(8.dp))
+            Spacer(modifier = Modifier.height(12.dp))
 
             Text(
                 text = label,
-                style = MaterialTheme.typography.titleLarge,
+                fontSize = 24.sp,
                 fontWeight = FontWeight.Bold,
                 color = color
             )
@@ -236,60 +256,84 @@ private fun HealthScoreCard(score: Int) {
 }
 
 /**
- * Issues Summary Card
+ * Issues Summary Card - Dark Theme
  */
 @Composable
 private fun IssuesSummaryCard(report: PasswordAnalyzer.HealthReport) {
     val breachedCount = report.passwordDetails.count { it.breachResult?.isBreached == true }
 
     Card(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier
+            .fillMaxWidth()
+            .border(
+                width = 2.dp,
+                color = SafeSphereColors.Error.copy(alpha = 0.5f),
+                shape = RoundedCornerShape(16.dp)
+            ),
         colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.3f)
-        )
+            containerColor = SafeSphereColors.Surface
+        ),
+        elevation = CardDefaults.cardElevation(defaultElevation = 4.dp),
+        shape = RoundedCornerShape(16.dp)
     ) {
         Column(
-            modifier = Modifier.padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(
+                    Brush.verticalGradient(
+                        colors = listOf(
+                            SafeSphereColors.Error.copy(alpha = 0.1f),
+                            Color.Transparent
+                        )
+                    )
+                )
+                .padding(20.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             Text(
                 text = "⚠️ Issues Found",
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Bold
+                fontSize = 20.sp,
+                fontWeight = FontWeight.Bold,
+                color = SafeSphereColors.Error
             )
 
             if (breachedCount > 0) {
                 IssueRow(
                     icon = "🚨",
-                    text = "$breachedCount Leaked Password${if (breachedCount > 1) "s" else ""} - Change Now!"
+                    text = "$breachedCount Leaked Password${if (breachedCount > 1) "s" else ""} - Change Now!",
+                    color = SafeSphereColors.Error
                 )
             }
 
             if (report.weakPasswords > 0) {
                 IssueRow(
                     icon = "🔴",
-                    text = "${report.weakPasswords} Weak Password${if (report.weakPasswords > 1) "s" else ""}"
+                    text = "${report.weakPasswords} Weak Password${if (report.weakPasswords > 1) "s" else ""}",
+                    color = Color(0xFFFF9800)
                 )
             }
 
             if (report.duplicatePasswords > 0) {
                 IssueRow(
                     icon = "❌",
-                    text = "${report.duplicatePasswords} Duplicate Password${if (report.duplicatePasswords > 1) "s" else ""}"
+                    text = "${report.duplicatePasswords} Duplicate Password${if (report.duplicatePasswords > 1) "s" else ""}",
+                    color = Color(0xFFFF9800)
                 )
             }
 
             if (report.commonPasswords > 0) {
                 IssueRow(
                     icon = "⚠️",
-                    text = "${report.commonPasswords} Common Password${if (report.commonPasswords > 1) "s" else ""}"
+                    text = "${report.commonPasswords} Common Password${if (report.commonPasswords > 1) "s" else ""}",
+                    color = SafeSphereColors.Warning
                 )
             }
 
             if (report.oldPasswords > 0) {
                 IssueRow(
                     icon = "⏰",
-                    text = "${report.oldPasswords} Old Password${if (report.oldPasswords > 1) "s" else ""} (>1 year)"
+                    text = "${report.oldPasswords} Old Password${if (report.oldPasswords > 1) "s" else ""} (>1 year)",
+                    color = SafeSphereColors.Warning
                 )
             }
         }
@@ -297,21 +341,31 @@ private fun IssuesSummaryCard(report: PasswordAnalyzer.HealthReport) {
 }
 
 /**
- * Issue Row
+ * Issue Row - Dark Theme
  */
 @Composable
-private fun IssueRow(icon: String, text: String) {
+private fun IssueRow(icon: String, text: String, color: Color) {
     Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(12.dp))
+            .background(SafeSphereColors.SurfaceVariant.copy(alpha = 0.5f))
+            .padding(12.dp),
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(8.dp)
+        horizontalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        Text(text = icon, style = MaterialTheme.typography.bodyLarge)
-        Text(text = text, style = MaterialTheme.typography.bodyMedium)
+        Text(text = icon, fontSize = 24.sp)
+        Text(
+            text = text,
+            fontSize = 14.sp,
+            color = color,
+            fontWeight = FontWeight.SemiBold
+        )
     }
 }
 
 /**
- * Password Detail Card
+ * Password Detail Card - Dark Theme with Glass Effect
  */
 @Composable
 private fun PasswordDetailCard(
@@ -322,25 +376,13 @@ private fun PasswordDetailCard(
     val hasIssues = detail.issues.isNotEmpty()
     val isBreached = detail.breachResult?.isBreached == true
 
-    // Determine background color based on password strength
-    val backgroundColor = when {
-        isBreached -> Color(0xFFFFEBEE)  // Light red for leaked
-        detail.strength.label == "Weak" || detail.strength.label == "Very Weak" -> Color(0xFFFFF3E0)  // Light orange
-        detail.strength.label == "Fair" -> Color(0xFFFFF8E1)  // Light yellow
-        detail.strength.label == "Good" -> Color(0xFFE3F2FD)  // Light blue
-        detail.strength.label == "Strong" || detail.strength.label == "Very Strong" -> Color(
-            0xFFE8F5E9
-        )  // Light green
-        else -> Color(0xFFF5F5F5)  // Light gray
-    }
-
-    // Determine border based on severity
+    // Dark theme border color
     val borderColor = when {
-        isBreached -> Color(0xFFD32F2F)  // Red for leaked
-        detail.strength.label == "Weak" || detail.strength.label == "Very Weak" -> Color(0xFFFF9800)  // Orange
-        detail.strength.label == "Fair" -> Color(0xFFFBC02D)  // Yellow
-        detail.strength.label == "Good" -> Color(0xFF2196F3)  // Blue
-        else -> Color(0xFF4CAF50)  // Green for strong
+        isBreached -> SafeSphereColors.Error
+        detail.strength.label == "Weak" || detail.strength.label == "Very Weak" -> Color(0xFFFF9800)
+        detail.strength.label == "Fair" -> SafeSphereColors.Warning
+        detail.strength.label == "Good" -> SafeSphereColors.Primary
+        else -> SafeSphereColors.Success
     }
 
     Card(
@@ -348,18 +390,28 @@ private fun PasswordDetailCard(
             .fillMaxWidth()
             .border(
                 width = if (isBreached) 3.dp else 2.dp,
-                color = borderColor,
-                shape = RoundedCornerShape(12.dp)
+                color = borderColor.copy(alpha = 0.6f),
+                shape = RoundedCornerShape(16.dp)
             ),
         colors = CardDefaults.cardColors(
-            containerColor = backgroundColor
+            containerColor = SafeSphereColors.Surface
         ),
-        shape = RoundedCornerShape(12.dp),
-        elevation = CardDefaults.cardElevation(defaultElevation = if (isBreached) 6.dp else 2.dp)
+        shape = RoundedCornerShape(16.dp),
+        elevation = CardDefaults.cardElevation(defaultElevation = if (isBreached) 8.dp else 4.dp)
     ) {
         Column(
-            modifier = Modifier.padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(
+                    Brush.verticalGradient(
+                        colors = listOf(
+                            borderColor.copy(alpha = 0.15f),
+                            Color.Transparent
+                        )
+                    )
+                )
+                .padding(20.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             // Title and Strength Badge
             Row(
@@ -370,12 +422,12 @@ private fun PasswordDetailCard(
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
                         text = detail.title,
-                        style = MaterialTheme.typography.titleMedium,
+                        fontSize = 18.sp,
                         fontWeight = FontWeight.Bold,
-                        color = Color.Black
+                        color = SafeSphereColors.TextPrimary
                     )
 
-                    // Breach Warning (Most Prominent)
+                    // Breach Warning
                     detail.breachResult?.let { breach ->
                         if (breach.isBreached) {
                             Spacer(modifier = Modifier.height(8.dp))
@@ -384,8 +436,8 @@ private fun PasswordDetailCard(
                                 horizontalArrangement = Arrangement.spacedBy(6.dp)
                             ) {
                                 Surface(
-                                    color = Color(0xFFD32F2F),
-                                    shape = RoundedCornerShape(8.dp)
+                                    color = SafeSphereColors.Error,
+                                    shape = RoundedCornerShape(10.dp)
                                 ) {
                                     Text(
                                         text = "🚨 LEAKED",
@@ -393,15 +445,15 @@ private fun PasswordDetailCard(
                                             horizontal = 12.dp,
                                             vertical = 6.dp
                                         ),
-                                        style = MaterialTheme.typography.labelMedium,
+                                        fontSize = 12.sp,
                                         color = Color.White,
                                         fontWeight = FontWeight.Bold
                                     )
                                 }
                                 Text(
                                     text = breach.message,
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = Color(0xFFD32F2F),
+                                    fontSize = 12.sp,
+                                    color = SafeSphereColors.Error,
                                     fontWeight = FontWeight.Bold
                                 )
                             }
@@ -409,18 +461,17 @@ private fun PasswordDetailCard(
                     }
                 }
 
-                // Strength Badge - Larger and More Prominent
+                // Strength Badge
                 Surface(
                     color = strengthColor,
                     shape = RoundedCornerShape(12.dp),
-                    shadowElevation = 2.dp
+                    shadowElevation = 4.dp
                 ) {
                     Row(
                         modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(6.dp)
                     ) {
-                        // Emoji indicator
                         Text(
                             text = when {
                                 isBreached -> "🚨"
@@ -429,11 +480,11 @@ private fun PasswordDetailCard(
                                 detail.strength.label == "Fair" -> "⚠️"
                                 else -> "🔴"
                             },
-                            style = MaterialTheme.typography.titleMedium
+                            fontSize = 18.sp
                         )
                         Text(
                             text = detail.strength.label,
-                            style = MaterialTheme.typography.labelLarge,
+                            fontSize = 14.sp,
                             color = Color.White,
                             fontWeight = FontWeight.Bold
                         )
@@ -442,12 +493,12 @@ private fun PasswordDetailCard(
             }
 
             // Visual Strength Bar
-            Row(
+            Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(8.dp)
-                    .clip(RoundedCornerShape(4.dp))
-                    .background(Color.White.copy(alpha = 0.5f))
+                    .height(10.dp)
+                    .clip(RoundedCornerShape(5.dp))
+                    .background(SafeSphereColors.SurfaceVariant)
             ) {
                 Box(
                     modifier = Modifier
@@ -469,31 +520,31 @@ private fun PasswordDetailCard(
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .clip(RoundedCornerShape(8.dp))
-                        .background(Color.White.copy(alpha = 0.7f))
-                        .padding(12.dp),
-                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(SafeSphereColors.SurfaceVariant.copy(alpha = 0.5f))
+                        .padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     Text(
                         text = "⚠️ Issues:",
-                        style = MaterialTheme.typography.labelMedium,
+                        fontSize = 14.sp,
                         fontWeight = FontWeight.Bold,
-                        color = Color(0xFFE65100)
+                        color = SafeSphereColors.Warning
                     )
                     detail.issues.forEach { issue ->
                         Row(
                             verticalAlignment = Alignment.Top,
-                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
                             Text(
                                 text = "•",
-                                color = Color(0xFFD32F2F),
+                                color = SafeSphereColors.Error,
                                 fontWeight = FontWeight.Bold
                             )
                             Text(
                                 text = issue,
-                                style = MaterialTheme.typography.bodySmall,
-                                color = Color(0xFFD32F2F),
+                                fontSize = 13.sp,
+                                color = SafeSphereColors.TextPrimary,
                                 fontWeight = FontWeight.Medium
                             )
                         }
@@ -505,13 +556,13 @@ private fun PasswordDetailCard(
             if (detail.ageInDays > 0) {
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
-                    Text(text = "📅", style = MaterialTheme.typography.bodyMedium)
+                    Text(text = "📅", fontSize = 16.sp)
                     Text(
                         text = "Password age: ${detail.ageInDays} days",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = Color.Black.copy(alpha = 0.7f),
+                        fontSize = 13.sp,
+                        color = SafeSphereColors.TextSecondary,
                         fontWeight = FontWeight.Medium
                     )
                 }
@@ -523,34 +574,40 @@ private fun PasswordDetailCard(
                     onClick = onFix,
                     modifier = Modifier.fillMaxWidth(),
                     colors = ButtonDefaults.buttonColors(
-                        containerColor = if (isBreached) Color(0xFFD32F2F) else Color(0xFFFF9800)
+                        containerColor = if (isBreached) SafeSphereColors.Error else SafeSphereColors.Warning
                     ),
-                    shape = RoundedCornerShape(10.dp),
+                    shape = RoundedCornerShape(12.dp),
                     elevation = ButtonDefaults.buttonElevation(defaultElevation = 4.dp)
                 ) {
-                    Icon(Icons.Default.Refresh, contentDescription = null)
+                    Icon(Icons.Default.Refresh, contentDescription = null, tint = Color.White)
                     Spacer(modifier = Modifier.width(8.dp))
                     Text(
                         text = if (isBreached) "🚨 Change Immediately!" else "🔄 Generate Strong Password",
-                        fontWeight = FontWeight.Bold
+                        fontWeight = FontWeight.Bold,
+                        color = Color.White
                     )
                 }
             } else {
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .clip(RoundedCornerShape(8.dp))
-                        .background(Color(0xFF4CAF50).copy(alpha = 0.15f))
-                        .padding(12.dp),
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(SafeSphereColors.Success.copy(alpha = 0.2f))
+                        .border(
+                            width = 1.dp,
+                            color = SafeSphereColors.Success.copy(alpha = 0.5f),
+                            shape = RoundedCornerShape(12.dp)
+                        )
+                        .padding(16.dp),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.Center
                 ) {
-                    Text(text = "✅", style = MaterialTheme.typography.titleMedium)
+                    Text(text = "✅", fontSize = 20.sp)
                     Spacer(modifier = Modifier.width(8.dp))
                     Text(
                         text = "Strong & Secure",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = Color(0xFF388E3C),
+                        fontSize = 14.sp,
+                        color = SafeSphereColors.Success,
                         fontWeight = FontWeight.Bold
                     )
                 }

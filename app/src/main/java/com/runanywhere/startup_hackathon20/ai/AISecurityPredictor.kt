@@ -8,6 +8,8 @@ import kotlinx.coroutines.withContext
 import kotlin.math.exp
 import kotlin.math.min
 import kotlin.math.max
+import kotlin.math.ln
+import kotlin.math.pow
 
 /**
  * AI Security Predictor - Predicts future security risks using ML algorithms
@@ -288,7 +290,7 @@ class AISecurityPredictor {
 
         // Solve: 80 = currentRisk * e^(rate * days)
         // days = ln(80 / currentRisk) / rate
-        val days = (Math.log((80.0 / currentRisk.toDouble())) / growthRate).toInt()
+        val days = (ln((80.0 / currentRisk.toDouble())) / growthRate).toInt()
 
         return max(1, min(999, days))
     }
@@ -552,4 +554,570 @@ class AISecurityPredictor {
 
         return commonPatterns.any { it.containsMatchIn(password) }
     }
+
+    // ==================== NEW: ADVANCED FEATURES ====================
+
+    /**
+     * PER-PASSWORD ANALYSIS
+     * Analyzes each password individually with detailed breakdown
+     */
+    data class PasswordAnalysisResult(
+        val passwordEntry: PasswordVaultEntry,
+        val overallScore: Int, // 0-100
+        val strengthLevel: StrengthLevel,
+        val issues: List<PasswordIssue>,
+        val strengths: List<PasswordStrength>,
+        val recommendations: List<String>,
+        val suggestedPassword: String,
+        val improvementPotential: Int, // How much score would improve
+        val breachDetails: BreachDetails?,
+        val attackResistance: AttackResistance,
+        val ageInfo: AgeInfo
+    )
+
+    enum class StrengthLevel(val displayName: String, val icon: String, val colorHex: Long) {
+        CRITICAL("Critical", "🔴", 0xFFD32F2F),
+        WEAK("Weak", "🟠", 0xFFF57C00),
+        MEDIUM("Medium", "🟡", 0xFFFBC02D),
+        GOOD("Good", "🟢", 0xFF8BC34A),
+        STRONG("Strong", "💚", 0xFF388E3C),
+        EXCELLENT("Excellent", "💎", 0xFF1976D2)
+    }
+
+    data class PasswordIssue(
+        val type: IssueType,
+        val description: String,
+        val severity: IssueSeverity,
+        val fixSuggestion: String
+    )
+
+    enum class IssueType(val icon: String) {
+        TOO_SHORT("📏"),
+        NO_UPPERCASE("🔤"),
+        NO_LOWERCASE("🔡"),
+        NO_NUMBERS("🔢"),
+        NO_SYMBOLS("❗"),
+        COMMON_PATTERN("⚠️"),
+        IN_BREACH("🚨"),
+        REUSED("❌"),
+        TOO_OLD("⏰"),
+        DICTIONARY_WORD("📖"),
+        PERSONAL_INFO("👤")
+    }
+
+    enum class IssueSeverity {
+        CRITICAL, HIGH, MEDIUM, LOW
+    }
+
+    data class PasswordStrength(
+        val type: String,
+        val description: String,
+        val icon: String
+    )
+
+    data class BreachDetails(
+        val isBreached: Boolean,
+        val breachCount: Int,
+        val breaches: List<BreachIncident>,
+        val totalExposures: Long,
+        val darkWebPrice: String,
+        val urgencyLevel: String,
+        val estimatedCompromiseTime: String
+    )
+
+    data class BreachIncident(
+        val source: String,
+        val year: Int,
+        val affectedAccounts: Long
+    )
+
+    data class AttackResistance(
+        val dictionaryAttackTime: String,
+        val bruteForceTime: String,
+        val rainbowTableTime: String,
+        val overallResistance: String,
+        val entropy: Double
+    )
+
+    data class AgeInfo(
+        val ageInDays: Int,
+        val createdDate: String,
+        val lastModifiedDate: String,
+        val needsRotation: Boolean,
+        val rotationRecommendation: String
+    )
+
+    /**
+     * Analyze individual password in detail
+     */
+    suspend fun analyzePassword(entry: PasswordVaultEntry): PasswordAnalysisResult = withContext(Dispatchers.Default) {
+        val password = try {
+            SecurityManager.decrypt(entry.encryptedPassword)
+        } catch (e: Exception) {
+            return@withContext PasswordAnalysisResult(
+                passwordEntry = entry,
+                overallScore = 0,
+                strengthLevel = StrengthLevel.CRITICAL,
+                issues = listOf(
+                    PasswordIssue(
+                        type = IssueType.TOO_SHORT,
+                        description = "Unable to decrypt password",
+                        severity = IssueSeverity.CRITICAL,
+                        fixSuggestion = "Re-save this password"
+                    )
+                ),
+                strengths = emptyList(),
+                recommendations = listOf("Password encryption error - please re-save"),
+                suggestedPassword = generateStrongPassword(16),
+                improvementPotential = 0,
+                breachDetails = null,
+                attackResistance = AttackResistance("N/A", "N/A", "N/A", "Unknown", 0.0),
+                ageInfo = calculateAgeInfo(entry)
+            )
+        }
+
+        // Analyze password components
+        val issues = mutableListOf<PasswordIssue>()
+        val strengths = mutableListOf<PasswordStrength>()
+
+        // Check length
+        if (password.length < 8) {
+            issues.add(PasswordIssue(
+                type = IssueType.TOO_SHORT,
+                description = "Only ${password.length} characters (need 12+)",
+                severity = IssueSeverity.HIGH,
+                fixSuggestion = "Add ${12 - password.length} more characters"
+            ))
+        } else if (password.length >= 16) {
+            strengths.add(PasswordStrength(
+                type = "Length",
+                description = "Excellent length (${password.length} characters)",
+                icon = "✅"
+            ))
+        }
+
+        // Check uppercase
+        if (!password.any { it.isUpperCase() }) {
+            issues.add(PasswordIssue(
+                type = IssueType.NO_UPPERCASE,
+                description = "No uppercase letters",
+                severity = IssueSeverity.MEDIUM,
+                fixSuggestion = "Add A-Z characters"
+            ))
+        } else {
+            strengths.add(PasswordStrength("Uppercase", "Contains uppercase letters", "✅"))
+        }
+
+        // Check lowercase
+        if (!password.any { it.isLowerCase() }) {
+            issues.add(PasswordIssue(
+                type = IssueType.NO_LOWERCASE,
+                description = "No lowercase letters",
+                severity = IssueSeverity.MEDIUM,
+                fixSuggestion = "Add a-z characters"
+            ))
+        } else {
+            strengths.add(PasswordStrength("Lowercase", "Contains lowercase letters", "✅"))
+        }
+
+        // Check numbers
+        if (!password.any { it.isDigit() }) {
+            issues.add(PasswordIssue(
+                type = IssueType.NO_NUMBERS,
+                description = "No numbers",
+                severity = IssueSeverity.MEDIUM,
+                fixSuggestion = "Add 0-9 digits"
+            ))
+        } else {
+            strengths.add(PasswordStrength("Numbers", "Contains numbers", "✅"))
+        }
+
+        // Check special characters
+        val specialChars = "!@#$%^&*()_+-=[]{}|;:,.<>?"
+        if (!password.any { it in specialChars }) {
+            issues.add(PasswordIssue(
+                type = IssueType.NO_SYMBOLS,
+                description = "No special characters",
+                severity = IssueSeverity.HIGH,
+                fixSuggestion = "Add symbols like !@#$%"
+            ))
+        } else {
+            strengths.add(PasswordStrength("Symbols", "Contains special characters", "✅"))
+        }
+
+        // Check for common patterns
+        if (hasCommonPattern(password)) {
+            issues.add(PasswordIssue(
+                type = IssueType.COMMON_PATTERN,
+                description = "Contains predictable pattern",
+                severity = IssueSeverity.HIGH,
+                fixSuggestion = "Use random characters instead"
+            ))
+        }
+
+        // Check breach status
+        val breachResult = BreachDetector.checkBreach(password)
+        val breachDetails = if (breachResult.isBreached) {
+            issues.add(PasswordIssue(
+                type = IssueType.IN_BREACH,
+                description = "Found in ${breachResult.breachCount} data breach(es)",
+                severity = IssueSeverity.CRITICAL,
+                fixSuggestion = "Change immediately - password is compromised!"
+            ))
+            createBreachDetails(breachResult)
+        } else {
+            strengths.add(PasswordStrength("Not Breached", "Not found in known breaches", "✅"))
+            null
+        }
+
+        // Calculate age
+        val ageInfo = calculateAgeInfo(entry)
+        if (ageInfo.needsRotation) {
+            issues.add(PasswordIssue(
+                type = IssueType.TOO_OLD,
+                description = "Password is ${ageInfo.ageInDays} days old",
+                severity = if (ageInfo.ageInDays > 730) IssueSeverity.HIGH else IssueSeverity.MEDIUM,
+                fixSuggestion = ageInfo.rotationRecommendation
+            ))
+        }
+
+        // Calculate overall score
+        val baseScore = entry.strengthScore
+        val issuesPenalty: Int = issues.map { issue ->
+            when (issue.severity) {
+                IssueSeverity.CRITICAL -> 20
+                IssueSeverity.HIGH -> 15
+                IssueSeverity.MEDIUM -> 10
+                IssueSeverity.LOW -> 5
+            }
+        }.sum()
+        val overallScore = max(0, min(100, baseScore - issuesPenalty))
+
+        // Determine strength level
+        val strengthLevel = when {
+            overallScore >= 90 -> StrengthLevel.EXCELLENT
+            overallScore >= 75 -> StrengthLevel.STRONG
+            overallScore >= 60 -> StrengthLevel.GOOD
+            overallScore >= 40 -> StrengthLevel.MEDIUM
+            overallScore >= 20 -> StrengthLevel.WEAK
+            else -> StrengthLevel.CRITICAL
+        }
+
+        // Generate recommendations
+        val recommendations = generateRecommendations(issues, password)
+
+        // Generate suggested password that fixes all issues
+        val suggestedPassword = generateImprovedPassword(password, issues)
+
+        // Calculate improvement potential
+        val improvementPotential = max(0, 95 - overallScore)
+
+        // Calculate attack resistance
+        val attackResistance = calculateAttackResistance(password)
+
+        PasswordAnalysisResult(
+            passwordEntry = entry,
+            overallScore = overallScore,
+            strengthLevel = strengthLevel,
+            issues = issues,
+            strengths = strengths,
+            recommendations = recommendations,
+            suggestedPassword = suggestedPassword,
+            improvementPotential = improvementPotential,
+            breachDetails = breachDetails,
+            attackResistance = attackResistance,
+            ageInfo = ageInfo
+        )
+    }
+
+    /**
+     * Analyze all passwords individually
+     */
+    suspend fun analyzeAllPasswords(passwords: List<PasswordVaultEntry>): List<PasswordAnalysisResult> = 
+        withContext(Dispatchers.Default) {
+            passwords.map { analyzePassword(it) }
+        }
+
+    /**
+     * Create detailed breach information
+     */
+    private fun createBreachDetails(breachResult: BreachDetector.BreachResult): BreachDetails {
+        // Simulate breach incidents based on breach count
+        val incidents = when {
+            breachResult.breachCount > 20_000_000 -> listOf(
+                BreachIncident("Collection #1", 2019, 773_000_000),
+                BreachIncident("LinkedIn", 2012, 117_000_000),
+                BreachIncident("Yahoo", 2013, 3_000_000_000)
+            )
+            breachResult.breachCount > 1_000_000 -> listOf(
+                BreachIncident("LinkedIn", 2012, 117_000_000),
+                BreachIncident("Adobe", 2013, 153_000_000)
+            )
+            breachResult.breachCount > 100_000 -> listOf(
+                BreachIncident("Dropbox", 2012, 68_000_000)
+            )
+            else -> listOf(
+                BreachIncident("Various Sites", 2020, breachResult.breachCount.toLong())
+            )
+        }
+
+        val darkWebPrice = when {
+            breachResult.breachCount > 10_000_000 -> "$0.01/account"
+            breachResult.breachCount > 1_000_000 -> "$0.05/account"
+            else -> "$0.50/account"
+        }
+
+        val urgencyLevel = when (breachResult.severity) {
+            BreachDetector.BreachSeverity.CRITICAL -> "CHANGE IMMEDIATELY"
+            BreachDetector.BreachSeverity.HIGH -> "Change within 24 hours"
+            BreachDetector.BreachSeverity.MEDIUM -> "Change within 1 week"
+            else -> "Consider changing soon"
+        }
+
+        val compromiseTime = when (breachResult.severity) {
+            BreachDetector.BreachSeverity.CRITICAL -> "Already compromised"
+            BreachDetector.BreachSeverity.HIGH -> "< 24 hours"
+            BreachDetector.BreachSeverity.MEDIUM -> "1-7 days"
+            else -> "1-30 days"
+        }
+
+        return BreachDetails(
+            isBreached = true,
+            breachCount = breachResult.breachCount,
+            breaches = incidents,
+            totalExposures = incidents.sumOf { it.affectedAccounts },
+            darkWebPrice = darkWebPrice,
+            urgencyLevel = urgencyLevel,
+            estimatedCompromiseTime = compromiseTime
+        )
+    }
+
+    /**
+     * Calculate attack resistance metrics
+     */
+    private fun calculateAttackResistance(password: String): AttackResistance {
+        // Calculate entropy (bits of randomness)
+        val charsetSize = when {
+            password.any { it in "!@#$%^&*()_+-=[]{}|;:,.<>?" } -> 94 // All printable ASCII
+            password.any { it.isDigit() } && password.any { it.isLetter() } -> 62 // Alphanumeric
+            password.any { it.isLetter() } -> 52 // Letters only
+            password.any { it.isDigit() } -> 10 // Numbers only
+            else -> 26 // Lowercase only
+        }
+        
+        val entropy = password.length * (ln(charsetSize.toDouble()) / ln(2.0))
+        
+        // Calculate attack times
+        val combinationsPerSecond = 1_000_000_000.0 // 1 billion attempts/second (GPU)
+        val totalCombinations = charsetSize.toDouble().pow(password.length.toDouble())
+        val secondsToCrack = totalCombinations / combinationsPerSecond / 2 // Average case
+
+        // Dictionary attack (much faster if common words)
+        val dictionaryTime = if (password.length < 8 || hasCommonPattern(password)) {
+            "< 1 second"
+        } else if (password.length < 10) {
+            "< 1 minute"
+        } else if (password.length < 12) {
+            "< 1 hour"
+        } else {
+            "Several days"
+        }
+
+        // Brute force attack
+        val bruteForceTime = when {
+            secondsToCrack < 1 -> "Instant"
+            secondsToCrack < 60 -> "${secondsToCrack.toInt()} seconds"
+            secondsToCrack < 3600 -> "${(secondsToCrack / 60).toInt()} minutes"
+            secondsToCrack < 86400 -> "${(secondsToCrack / 3600).toInt()} hours"
+            secondsToCrack < 31536000 -> "${(secondsToCrack / 86400).toInt()} days"
+            secondsToCrack < 3153600000.0 -> "${(secondsToCrack / 31536000).toInt()} years"
+            else -> "Billions of years"
+        }
+
+        // Rainbow table attack (faster for short passwords)
+        val rainbowTime = if (password.length < 8) {
+            "< 10 minutes"
+        } else if (password.length < 10) {
+            "Few hours"
+        } else {
+            "Not feasible"
+        }
+
+        // Overall resistance
+        val resistance = when {
+            entropy > 80 -> "Excellent - Resistant to all attacks"
+            entropy > 60 -> "Good - Resistant to most attacks"
+            entropy > 40 -> "Fair - Vulnerable to dedicated attacks"
+            entropy > 20 -> "Weak - Easy to crack"
+            else -> "Critical - Can be cracked instantly"
+        }
+
+        return AttackResistance(
+            dictionaryAttackTime = dictionaryTime,
+            bruteForceTime = bruteForceTime,
+            rainbowTableTime = rainbowTime,
+            overallResistance = resistance,
+            entropy = entropy
+        )
+    }
+
+    /**
+     * Calculate password age information
+     */
+    private fun calculateAgeInfo(entry: PasswordVaultEntry): AgeInfo {
+        val now = System.currentTimeMillis()
+        val ageInDays = ((now - entry.createdAt) / (1000 * 60 * 60 * 24)).toInt()
+        val daysSinceModified = ((now - entry.modifiedAt) / (1000 * 60 * 60 * 24)).toInt()
+        
+        val needsRotation = ageInDays > 365
+        
+        val recommendation = when {
+            ageInDays > 730 -> "Critical: Rotate immediately (2+ years old)"
+            ageInDays > 365 -> "High priority: Rotate within 1 week"
+            ageInDays > 180 -> "Consider rotating soon (6+ months old)"
+            else -> "Age is acceptable"
+        }
+
+        return AgeInfo(
+            ageInDays = ageInDays,
+            createdDate = java.text.SimpleDateFormat("MMM dd, yyyy", java.util.Locale.getDefault())
+                .format(java.util.Date(entry.createdAt)),
+            lastModifiedDate = java.text.SimpleDateFormat("MMM dd, yyyy", java.util.Locale.getDefault())
+                .format(java.util.Date(entry.modifiedAt)),
+            needsRotation = needsRotation,
+            rotationRecommendation = recommendation
+        )
+    }
+
+    /**
+     * Generate smart recommendations based on issues
+     */
+    private fun generateRecommendations(issues: List<PasswordIssue>, currentPassword: String): List<String> {
+        val recommendations = mutableListOf<String>()
+
+        if (issues.any { it.type == IssueType.IN_BREACH }) {
+            recommendations.add("🚨 CRITICAL: Change immediately - password is compromised")
+        }
+
+        if (issues.any { it.type == IssueType.TOO_SHORT }) {
+            val minLength = 12
+            recommendations.add("📏 Increase length to at least $minLength characters")
+        }
+
+        if (issues.any { it.type == IssueType.NO_SYMBOLS }) {
+            recommendations.add("❗ Add special characters (!@#$%^&*)")
+        }
+
+        if (issues.any { it.type == IssueType.NO_NUMBERS }) {
+            recommendations.add("🔢 Include at least 2-3 numbers")
+        }
+
+        if (issues.any { it.type == IssueType.COMMON_PATTERN }) {
+            recommendations.add("⚠️ Avoid sequential or repeated characters")
+        }
+
+        if (issues.any { it.type == IssueType.TOO_OLD }) {
+            recommendations.add("🔄 Rotate password (recommended every 6-12 months)")
+        }
+
+        if (recommendations.isEmpty()) {
+            recommendations.add("✅ Password is strong - keep monitoring!")
+        }
+
+        return recommendations
+    }
+
+    /**
+     * Generate improved password that fixes all issues
+     */
+    private fun generateImprovedPassword(currentPassword: String, issues: List<PasswordIssue>): String {
+        // Start with a base strong password
+        val length = max(16, currentPassword.length + 4)
+        
+        // Build character set based on issues
+        val uppercase = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+        val lowercase = "abcdefghijklmnopqrstuvwxyz"
+        val numbers = "0123456789"
+        val symbols = "!@#$%^&*"
+        
+        val allChars = uppercase + lowercase + numbers + symbols
+        
+        // Generate random strong password
+        val random = java.security.SecureRandom()
+        val password = StringBuilder()
+        
+        // Ensure at least one of each type
+        password.append(uppercase[random.nextInt(uppercase.length)])
+        password.append(lowercase[random.nextInt(lowercase.length)])
+        password.append(numbers[random.nextInt(numbers.length)])
+        password.append(symbols[random.nextInt(symbols.length)])
+        
+        // Fill the rest randomly
+        repeat(length - 4) {
+            password.append(allChars[random.nextInt(allChars.length)])
+        }
+        
+        // Shuffle the password
+        val shuffled = password.toString().toList().shuffled(random).joinToString("")
+        
+        return shuffled
+    }
+
+    /**
+     * Generate strong password with specific length
+     */
+    private fun generateStrongPassword(length: Int): String {
+        val uppercase = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+        val lowercase = "abcdefghijklmnopqrstuvwxyz"
+        val numbers = "0123456789"
+        val symbols = "!@#$%^&*"
+        val allChars = uppercase + lowercase + numbers + symbols
+        
+        val random = java.security.SecureRandom()
+        val password = StringBuilder()
+        
+        password.append(uppercase[random.nextInt(uppercase.length)])
+        password.append(lowercase[random.nextInt(lowercase.length)])
+        password.append(numbers[random.nextInt(numbers.length)])
+        password.append(symbols[random.nextInt(symbols.length)])
+        
+        repeat(length - 4) {
+            password.append(allChars[random.nextInt(allChars.length)])
+        }
+        
+        return password.toString().toList().shuffled(random).joinToString("")
+    }
+
+    /**
+     * HISTORICAL TRACKING
+     * Track security score over time
+     */
+    data class SecurityScoreHistory(
+        val entries: List<HistoryEntry>,
+        val trend: TrendDirection,
+        val improvementPercentage: Float,
+        val milestones: List<Milestone>
+    )
+
+    data class HistoryEntry(
+        val timestamp: Long,
+        val score: Int,
+        val totalPasswords: Int,
+        val weakCount: Int,
+        val breachedCount: Int
+    )
+
+    enum class TrendDirection(val icon: String) {
+        IMPROVING("📈"),
+        STABLE("➡️"),
+        DECLINING("📉")
+    }
+
+    data class Milestone(
+        val title: String,
+        val description: String,
+        val timestamp: Long,
+        val icon: String,
+        val achieved: Boolean
+    )
 }

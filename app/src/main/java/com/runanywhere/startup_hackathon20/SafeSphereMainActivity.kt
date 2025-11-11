@@ -1,5 +1,6 @@
 package com.runanywhere.startup_hackathon20
 
+import com.runanywhere.startup_hackathon20.ui.AdvancedDataMapScreen
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
@@ -497,10 +498,13 @@ fun MainAppContent(
                                     SafeSphereScreen.SETTINGS -> EnhancedSettingsScreen(viewModel)
                                     SafeSphereScreen.MODELS -> EnhancedModelsScreen(viewModel)
                                     SafeSphereScreen.NOTIFICATIONS -> NotificationsScreen(viewModel)
-                                    SafeSphereScreen.PASSWORD_HEALTH -> EnhancedPasswordHealthScreen(
-                                        viewModel = viewModel
+                                    SafeSphereScreen.PASSWORD_HEALTH -> PasswordHealthScreen(
+                                        viewModel = viewModel,
+                                        onNavigateBack = { viewModel.navigateBack() }
                                     )
-                                    SafeSphereScreen.AI_PREDICTOR -> AIPredictorScreen(viewModel)
+                                    SafeSphereScreen.AI_PREDICTOR -> EnhancedAIPredictorScreen(
+                                        viewModel
+                                    )
 
                                     SafeSphereScreen.VOICE_ASSISTANT -> VoiceAssistantScreen(
                                         viewModel
