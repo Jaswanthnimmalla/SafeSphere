@@ -884,7 +884,9 @@ enum class SafeSphereScreen {
     DESKTOP_SYNC,
     ABOUT_US,
     BLOGS,
-    CONTACT_US
+    CONTACT_US,
+    SCREENSHOT_GUARDIAN,
+    CAMERA_SCANNER  // New camera document scanner
 }
 
 /**

@@ -35,6 +35,8 @@ enum class VaultCategory(val displayName: String, val icon: String) {
     DOCUMENTS("Documents", "📄"),
     MEDICAL("Medical", "🏥"),
     NOTES("Secure Notes", "📝"),
+    SCREENSHOTS("Protected Screenshots", "📸"),
+    IMAGES("Protected Images", "📸"),
     OTHER("Other", "📦")
 }
 

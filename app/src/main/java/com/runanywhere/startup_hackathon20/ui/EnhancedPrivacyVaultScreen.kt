@@ -952,6 +952,8 @@ private fun getCategoryColor(category: VaultCategory): Color {
         VaultCategory.DOCUMENTS -> SafeSphereColors.Secondary
         VaultCategory.MEDICAL -> SafeSphereColors.Warning
         VaultCategory.NOTES -> SafeSphereColors.Info
+        VaultCategory.SCREENSHOTS -> Color(0xFF2196F3) // Blue for screenshots
+        VaultCategory.IMAGES -> Color(0xFF4CAF50) // Green for images
         VaultCategory.OTHER -> SafeSphereColors.Error
     }
 }

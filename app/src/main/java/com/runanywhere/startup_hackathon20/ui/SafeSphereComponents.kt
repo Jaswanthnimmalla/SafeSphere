@@ -11,6 +11,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.*
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -434,9 +435,42 @@ fun ViewVaultItemDialog(
     var isAuthenticating by remember { mutableStateOf(true) }
     var authenticationFailed by remember { mutableStateOf(false) }
 
+    // Image loading state
+    var loadedBitmap by remember { mutableStateOf<android.graphics.Bitmap?>(null) }
+    var imageLoadError by remember { mutableStateOf<String?>(null) }
+    var showFullScreenImage by remember { mutableStateOf(false) }
+
     // Get activity context (now it's FragmentActivity)
     val context = androidx.compose.ui.platform.LocalContext.current
     val activity = context as? androidx.fragment.app.FragmentActivity
+
+    // Extract image path from content
+    fun extractImagePath(content: String): String? {
+        val lines = content.lines()
+        val imagePathLine =
+            lines.find { it.contains("🖼️ Image saved:") || it.contains("Image saved:") }
+        return imagePathLine?.substringAfter(":")?.trim()
+    }
+
+    // Load image from file path
+    LaunchedEffect(decryptedContent) {
+        if (item.category == VaultCategory.IMAGES && decryptedContent != null) {
+            val imagePath = extractImagePath(decryptedContent!!)
+            if (imagePath != null) {
+                try {
+                    val file = java.io.File(imagePath)
+                    if (file.exists()) {
+                        val bitmap = android.graphics.BitmapFactory.decodeFile(file.absolutePath)
+                        loadedBitmap = bitmap
+                    } else {
+                        imageLoadError = "Image file not found"
+                    }
+                } catch (e: Exception) {
+                    imageLoadError = "Failed to load image: ${e.message}"
+                }
+            }
+        }
+    }
 
     // Biometric authentication before decrypting
     LaunchedEffect(item.id) {
@@ -638,25 +672,110 @@ fun ViewVaultItemDialog(
 
                     else -> {
                         Column {
-                            Text(
-                                text = "Decrypted Content",
-                                fontSize = 14.sp,
-                                color = colors.textSecondary,
-                                modifier = Modifier.padding(bottom = 8.dp)
-                            )
+                            // Display image if it's an IMAGES category item
+                            if (item.category == VaultCategory.IMAGES) {
+                                loadedBitmap?.let { bitmap ->
+                                    Text(
+                                        text = "📸 Captured Image",
+                                        fontSize = 14.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = colors.textSecondary,
+                                        modifier = Modifier.padding(bottom = 4.dp)
+                                    )
 
-                            Box(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .clip(RoundedCornerShape(12.dp))
-                                    .background(colors.surfaceVariant)
-                                    .padding(16.dp)
-                            ) {
+                                    // Extract and display date/time
+                                    decryptedContent?.let { content ->
+                                        val datePattern = Regex("""📅 Date: (.+)""")
+                                        val dateMatch = datePattern.find(content)
+                                        dateMatch?.let { match ->
+                                            val dateTime = match.groupValues[1]
+                                            Row(
+                                                verticalAlignment = Alignment.CenterVertically,
+                                                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                                modifier = Modifier.padding(bottom = 8.dp)
+                                            ) {
+                                                Text(
+                                                    text = "📅",
+                                                    fontSize = 14.sp
+                                                )
+                                                Text(
+                                                    text = dateTime,
+                                                    fontSize = 13.sp,
+                                                    color = colors.textSecondary,
+                                                    fontWeight = FontWeight.Medium
+                                                )
+                                            }
+                                        }
+                                    }
+
+                                    Box(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .clip(RoundedCornerShape(12.dp))
+                                            .background(colors.surfaceVariant)
+                                            .padding(8.dp)
+                                    ) {
+                                        androidx.compose.foundation.Image(
+                                            bitmap = bitmap.asImageBitmap(),
+                                            contentDescription = "Captured Image",
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .heightIn(max = 300.dp)
+                                                .clip(RoundedCornerShape(8.dp))
+                                                .clickable { showFullScreenImage = true },
+                                            contentScale = androidx.compose.ui.layout.ContentScale.Fit
+                                        )
+                                    }
+
+                                    Spacer(modifier = Modifier.height(16.dp))
+                                }
+
+                                imageLoadError?.let { errorMsg ->
+                                    Box(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .clip(RoundedCornerShape(12.dp))
+                                            .background(colors.error.copy(alpha = 0.1f))
+                                            .padding(12.dp)
+                                    ) {
+                                        Row(
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                        ) {
+                                            Text(text = "⚠️", fontSize = 20.sp)
+                                            Text(
+                                                text = errorMsg,
+                                                fontSize = 13.sp,
+                                                color = colors.error
+                                            )
+                                        }
+                                    }
+                                    Spacer(modifier = Modifier.height(16.dp))
+                                }
+                            } else {
+                                // For non-image categories, show the text content
                                 Text(
-                                    text = decryptedContent ?: "",
-                                    fontSize = 16.sp,
-                                    color = colors.textPrimary
+                                    text = "Decrypted Content",
+                                    fontSize = 14.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = colors.textSecondary,
+                                    modifier = Modifier.padding(bottom = 8.dp)
                                 )
+
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clip(RoundedCornerShape(12.dp))
+                                        .background(colors.surfaceVariant)
+                                        .padding(16.dp)
+                                ) {
+                                    Text(
+                                        text = decryptedContent ?: "",
+                                        fontSize = 14.sp,
+                                        color = colors.textPrimary,
+                                        lineHeight = 20.sp
+                                    )
+                                }
                             }
                         }
                     }
@@ -686,6 +805,88 @@ fun ViewVaultItemDialog(
                             onClick = onDismiss,
                             primary = true,
                             modifier = Modifier.weight(1f)
+                        )
+                    }
+                }
+            }
+        }
+    }
+
+    if (showFullScreenImage && loadedBitmap != null) {
+        Dialog(
+            onDismissRequest = { showFullScreenImage = false },
+            properties = androidx.compose.ui.window.DialogProperties(
+                usePlatformDefaultWidth = false,
+                dismissOnBackPress = true,
+                dismissOnClickOutside = true
+            )
+        ) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(Color.Black)
+                    .clickable { showFullScreenImage = false }
+            ) {
+                // Full-screen image
+                androidx.compose.foundation.Image(
+                    bitmap = loadedBitmap!!.asImageBitmap(),
+                    contentDescription = "Full Screen Image",
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .clickable { showFullScreenImage = false },
+                    contentScale = androidx.compose.ui.layout.ContentScale.Fit
+                )
+
+                // Close button (X) at top-right
+                IconButton(
+                    onClick = { showFullScreenImage = false },
+                    modifier = Modifier
+                        .align(Alignment.TopEnd)
+                        .padding(16.dp)
+                        .size(48.dp)
+                        .clip(androidx.compose.foundation.shape.CircleShape)
+                        .background(Color.Black.copy(alpha = 0.6f))
+                ) {
+                    Text(
+                        text = "✕",
+                        fontSize = 24.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color.White
+                    )
+                }
+
+                // Image title at bottom
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.BottomCenter)
+                        .fillMaxWidth()
+                        .background(
+                            Brush.verticalGradient(
+                                colors = listOf(
+                                    Color.Transparent,
+                                    Color.Black.copy(alpha = 0.7f)
+                                )
+                            )
+                        )
+                        .padding(24.dp)
+                ) {
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text(
+                            text = item.title,
+                            fontSize = 18.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = Color.White,
+                            textAlign = TextAlign.Center
+                        )
+                        Text(
+                            text = "Tap anywhere to close",
+                            fontSize = 12.sp,
+                            color = Color.White.copy(alpha = 0.7f),
+                            textAlign = TextAlign.Center,
+                            modifier = Modifier.padding(top = 4.dp)
                         )
                     }
                 }

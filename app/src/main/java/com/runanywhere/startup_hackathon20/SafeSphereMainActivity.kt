@@ -526,6 +526,14 @@ fun MainAppContent(
                                     SafeSphereScreen.ABOUT_US -> AboutUsScreen(viewModel)
                                     SafeSphereScreen.BLOGS -> BlogsScreen(viewModel)
                                     SafeSphereScreen.CONTACT_US -> ContactUsScreen(viewModel)
+                                    SafeSphereScreen.CAMERA_SCANNER -> CameraDocumentScannerScreen(
+                                        viewModel = viewModel,
+                                        onNavigateBack = { viewModel.navigateBack() }
+                                    )
+                                    SafeSphereScreen.SCREENSHOT_GUARDIAN -> ScreenshotGuardianScreen(
+                                        viewModel = viewModel,
+                                        onNavigateBack = { viewModel.navigateBack() }
+                                    )
 
                                     else -> {}
                                 }
@@ -1065,6 +1073,7 @@ fun getScreenTitle(screen: SafeSphereScreen): String {
         SafeSphereScreen.ABOUT_US -> "About Us"
         SafeSphereScreen.BLOGS -> "Blog"
         SafeSphereScreen.CONTACT_US -> "Contact"
+        SafeSphereScreen.CAMERA_SCANNER -> "Image Scanner"
         else -> "SafeSphere"
     }
 }
@@ -1544,6 +1553,11 @@ fun DashboardScreen(viewModel: SafeSphereViewModel) {
                 onClick = { viewModel.navigateToScreen(SafeSphereScreen.AI_PREDICTOR) }
             )
 
+            // Screenshot Guardian Card - NEW FEATURE! Full width
+            FeaturedScreenshotGuardianCard(
+                onClick = { viewModel.navigateToScreen(SafeSphereScreen.SCREENSHOT_GUARDIAN) }
+            )
+
             Row(
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
                 modifier = Modifier.fillMaxWidth()
@@ -1874,6 +1888,110 @@ fun FeaturedAIPredictorDashboardCard(onClick: () -> Unit) {
 
                     Text(
                         text = "🔮 See risk 30 & 90 days ahead • 🎯 Breach probability",
+                        fontSize = 12.sp,
+                        color = SafeSphereColors.TextSecondary
+                    )
+                }
+            }
+        }
+    }
+}
+
+/**
+ * Featured Screenshot Guardian Card - more prominent in Quick Access
+ */
+@Composable
+fun FeaturedScreenshotGuardianCard(onClick: () -> Unit) {
+    GlassCard(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(120.dp)
+            .border(
+                width = 2.dp,
+                color = Color(0xFF448AFF),
+                shape = RoundedCornerShape(18.dp)
+            )
+            .clickable(onClick = onClick)
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(
+                    Brush.linearGradient(
+                        colors = listOf(
+                            Color(0xFF448AFF).copy(alpha = 0.08f),
+                            Color(0xFF1976D2).copy(alpha = 0.04f),
+                            Color.Transparent
+                        )
+                    )
+                )
+                .padding(20.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxSize(),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                // Icon
+                Box(
+                    modifier = Modifier
+                        .size(54.dp)
+                        .clip(CircleShape)
+                        .background(Color(0xFF1976D2).copy(alpha = 0.16f)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = "🖼️",
+                        fontSize = 28.sp
+                    )
+                }
+
+                Spacer(modifier = Modifier.width(16.dp))
+
+                Column(
+                    modifier = Modifier.weight(1f),
+                    verticalArrangement = Arrangement.Center
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(7.dp)
+                    ) {
+                        Text(
+                            text = "Screenshot Guardian",
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 17.sp,
+                            color = Color(0xFF1976D2)
+                        )
+
+                        // "FEATURE" badge
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(6.dp))
+                                .background(Color(0xFF1976D2))
+                                .padding(horizontal = 8.dp, vertical = 2.dp)
+                        ) {
+                            Text(
+                                text = "FEATURE",
+                                fontSize = 9.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Color.White,
+                                letterSpacing = 0.5.sp
+                            )
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(5.dp))
+
+                    Text(
+                        text = "Block unauthorized screenshots & protect your secrets",
+                        fontSize = 14.sp,
+                        color = SafeSphereColors.TextPrimary,
+                        fontWeight = FontWeight.Medium
+                    )
+
+                    Spacer(modifier = Modifier.height(2.dp))
+
+                    Text(
+                        text = "🫥 Guard vault & passwords • 🔒 Privacy always on",
                         fontSize = 12.sp,
                         color = SafeSphereColors.TextSecondary
                     )

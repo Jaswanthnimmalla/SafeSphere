@@ -204,14 +204,6 @@ fun SafeSphereDrawerContent(
                     isDark = isDarkTheme,
                     onToggle = onToggleTheme
                 )
-
-                // Desktop Sync
-                NavigationDrawerItem(
-                    iconEmoji = "🖥️",
-                    label = "Desktop Sync",
-                    selected = currentScreen == SafeSphereScreen.DESKTOP_SYNC,
-                    onClick = { onNavigate(SafeSphereScreen.DESKTOP_SYNC) }
-                )
             }
 
             // Logout Button at Bottom
@@ -296,16 +288,6 @@ fun NavigationDrawerItem(
                 fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
                 color = contentColor
             )
-
-            if (selected && !isLogout) {
-                Spacer(modifier = Modifier.weight(1f))
-                Box(
-                    modifier = Modifier
-                        .size(8.dp)
-                        .clip(CircleShape)
-                        .background(SafeSphereColors.Primary)
-                )
-            }
         }
     }
 }

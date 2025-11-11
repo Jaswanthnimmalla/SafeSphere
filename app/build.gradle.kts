@@ -137,12 +137,11 @@ dependencies {
     implementation("org.nanohttpd:nanohttpd:2.3.1")
     implementation("org.nanohttpd:nanohttpd-websocket:2.3.1")
 
-    // CameraX - for secure in-app camera
-    // REMOVED - Camera feature removed to reduce app size
-    // implementation("androidx.camera:camera-core:1.3.1")
-    // implementation("androidx.camera:camera-camera2:1.3.1")
-    // implementation("androidx.camera:camera-lifecycle:1.3.1")
-    // implementation("androidx.camera:camera-view:1.3.1")
+    // CameraX - for secure in-app camera and document scanning
+    implementation("androidx.camera:camera-core:1.3.1")
+    implementation("androidx.camera:camera-camera2:1.3.1")
+    implementation("androidx.camera:camera-lifecycle:1.3.1")
+    implementation("androidx.camera:camera-view:1.3.1")
 
     // Standard app dependencies
     implementation(libs.androidx.core.ktx)

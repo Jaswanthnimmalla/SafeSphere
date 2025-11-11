@@ -798,11 +798,39 @@ private fun FeaturesGrid(viewModel: SafeSphereViewModel, analytics: DashboardAna
                 onClick = { viewModel.navigateToScreen(SafeSphereScreen.THREAT_SIMULATION) }
             )
             CircularFeatureIcon(
+                icon = "🔍",
+                title = "Password Health",
+                subtitle = "Check breaches",
+                color = Color(0xFFE91E63),
+                onClick = { viewModel.navigateToScreen(SafeSphereScreen.PASSWORD_HEALTH) }
+            )
+        }
+
+        // Third row - 3 circular icons
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceEvenly
+        ) {
+            CircularFeatureIcon(
                 icon = "🤖",
                 title = "AI Predictor",
                 subtitle = "Risk analysis",
                 color = Color(0xFF9C27B0),
                 onClick = { viewModel.navigateToScreen(SafeSphereScreen.AI_PREDICTOR) }
+            )
+            CircularFeatureIcon(
+                icon = "📸",
+                title = "Doc Scanner",
+                subtitle = "AI scanning",
+                color = Color(0xFF4CAF50),
+                onClick = { viewModel.navigateToScreen(SafeSphereScreen.CAMERA_SCANNER) }
+            )
+            CircularFeatureIcon(
+                icon = "🎤",
+                title = "Voice AI",
+                subtitle = "Assistant",
+                color = Color(0xFF00BCD4),
+                onClick = { viewModel.navigateToScreen(SafeSphereScreen.VOICE_ASSISTANT) }
             )
         }
 
