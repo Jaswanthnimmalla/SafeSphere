@@ -41,7 +41,9 @@ fun SafeSphereDrawerContent(
     currentUser: User?,
     currentScreen: SafeSphereScreen,
     onNavigate: (SafeSphereScreen) -> Unit,
-    onLogout: () -> Unit
+    onLogout: () -> Unit,
+    isDarkTheme: Boolean,
+    onToggleTheme: () -> Unit
 ) {
     var showLogoutDialog by remember { mutableStateOf(false) }
 
@@ -197,6 +199,12 @@ fun SafeSphereDrawerContent(
                     }
                 )
 
+                // Theme Toggle
+                ThemeToggleItem(
+                    isDark = isDarkTheme,
+                    onToggle = onToggleTheme
+                )
+
                 // Desktop Sync
                 NavigationDrawerItem(
                     iconEmoji = "🖥️",
@@ -300,6 +308,26 @@ fun NavigationDrawerItem(
             }
         }
     }
+}
+
+/**
+ * Theme Toggle Item
+ */
+@Composable
+fun ThemeToggleItem(
+    isDark: Boolean,
+    onToggle: () -> Unit
+) {
+    val iconEmoji = if (isDark) "☀️" else "🌙"
+    val label = if (isDark) "Light Mode" else "Dark Mode"
+
+    NavigationDrawerItem(
+        iconEmoji = iconEmoji,
+        label = label,
+        selected = false,
+        onClick = onToggle,
+        isLogout = false
+    )
 }
 
 /**
@@ -1170,5 +1198,6 @@ enum class NotificationFilter(val label: String, val icon: String) {
     ALL("All", "📋"),
     UNREAD("Unread", "🔔"),
     SECURITY("Security", "🛡️"),
-    ACTIVITY("Activity", "📊")
+    ACTIVITY("Activity", "📊"),
+    THREATS("Threats", "🚨")
 }

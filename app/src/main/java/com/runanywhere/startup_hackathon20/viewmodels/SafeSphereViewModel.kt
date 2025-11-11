@@ -116,6 +116,10 @@ class SafeSphereViewModel(application: Application) : AndroidViewModel(applicati
     private val _latestNotification = MutableStateFlow<AppNotification?>(null)
     val latestNotification: StateFlow<AppNotification?> = _latestNotification.asStateFlow()
 
+    // Theme state - default to DARK theme (original professional UI)
+    private val _isDarkTheme = MutableStateFlow(true)  // true = Dark (default), false = Light
+    val isDarkTheme: StateFlow<Boolean> = _isDarkTheme.asStateFlow()
+
     companion object {
         private const val TAG = "SafeSphereVM"
     }
@@ -795,6 +799,24 @@ class SafeSphereViewModel(application: Application) : AndroidViewModel(applicati
         _recentActivityCount.value =
             activityHistory.count { it.timestamp > System.currentTimeMillis() - 1000 * 60 }
         _lastActivityTimestamp.value = record.timestamp
+    }
+
+    // ==================== THEME MANAGEMENT ====================
+
+    /**
+     * Toggle between light and dark theme
+     */
+    fun toggleTheme() {
+        _isDarkTheme.value = !_isDarkTheme.value
+        val themeName = if (_isDarkTheme.value) "Dark" else "Light"
+        showMessage("🎨 $themeName theme activated")
+        addNotification(
+            title = "🎨 Theme Changed",
+            message = "Switched to $themeName mode",
+            type = NotificationType.INFO,
+            category = NotificationCategory.SYSTEM,
+            priority = NotificationPriority.LOW
+        )
     }
 
 }

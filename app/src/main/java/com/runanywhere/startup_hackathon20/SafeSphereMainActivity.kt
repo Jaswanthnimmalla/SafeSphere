@@ -74,7 +74,10 @@ class SafeSphereMainActivity : FragmentActivity() {
         enableEdgeToEdge()
 
         setContent {
-            SafeSphereTheme {
+            // Collect theme state
+            val isDarkTheme by viewModel.isDarkTheme.collectAsState()
+
+            SafeSphereTheme(isDark = isDarkTheme) {
                 SafeSphereApp(viewModel)
             }
         }
@@ -104,6 +107,7 @@ fun NotificationPopup(
     onDismiss: () -> Unit,
     onClick: () -> Unit
 ) {
+    val colors = SafeSphereThemeColors
     var visible by remember { mutableStateOf(true) }
     
     LaunchedEffect(notification) {
@@ -141,10 +145,10 @@ fun NotificationPopup(
                         .clip(CircleShape)
                         .background(
                             when (notification.type) {
-                                NotificationType.ERROR -> SafeSphereColors.Error.copy(alpha = 0.1f)
-                                NotificationType.INFO -> SafeSphereColors.Primary.copy(alpha = 0.1f)
-                                NotificationType.SUCCESS -> SafeSphereColors.Success.copy(alpha = 0.1f)
-                                NotificationType.WARNING -> SafeSphereColors.Warning.copy(alpha = 0.1f)
+                                NotificationType.ERROR -> colors.error.copy(alpha = 0.1f)
+                                NotificationType.INFO -> colors.primary.copy(alpha = 0.1f)
+                                NotificationType.SUCCESS -> colors.success.copy(alpha = 0.1f)
+                                NotificationType.WARNING -> colors.warning.copy(alpha = 0.1f)
                             }
                         ),
                     contentAlignment = Alignment.Center
@@ -158,10 +162,10 @@ fun NotificationPopup(
                         },
                         contentDescription = null,
                         tint = when (notification.type) {
-                            NotificationType.ERROR -> SafeSphereColors.Error
-                            NotificationType.INFO -> SafeSphereColors.Primary
-                            NotificationType.SUCCESS -> SafeSphereColors.Success
-                            NotificationType.WARNING -> SafeSphereColors.Warning
+                            NotificationType.ERROR -> colors.error
+                            NotificationType.INFO -> colors.primary
+                            NotificationType.SUCCESS -> colors.success
+                            NotificationType.WARNING -> colors.warning
                         },
                         modifier = Modifier.size(24.dp)
                     )
@@ -176,7 +180,7 @@ fun NotificationPopup(
                         text = notification.title,
                         fontSize = 16.sp,
                         fontWeight = FontWeight.Bold,
-                        color = SafeSphereColors.TextPrimary
+                        color = colors.textPrimary
                     )
                     
                     Spacer(modifier = Modifier.height(4.dp))
@@ -184,7 +188,7 @@ fun NotificationPopup(
                     Text(
                         text = notification.message,
                         fontSize = 14.sp,
-                        color = SafeSphereColors.TextSecondary,
+                        color = colors.textSecondary,
                         maxLines = 2
                     )
                 }
@@ -198,7 +202,7 @@ fun NotificationPopup(
                     Icon(
                         imageVector = Icons.Filled.Close,
                         contentDescription = "Dismiss",
-                        tint = SafeSphereColors.TextSecondary
+                        tint = colors.textSecondary
                     )
                 }
             }
@@ -216,6 +220,9 @@ fun SafeSphereApp(
     // Splash screen state
     var showSplash by remember { mutableStateOf(true) }
 
+    // Collect theme state
+    val isDarkTheme by viewModel.isDarkTheme.collectAsState()
+
     if (showSplash) {
         SplashScreen(onSplashComplete = { showSplash = false })
     } else {
@@ -231,11 +238,13 @@ fun SafeSphereApp(
 fun MainAppContent(
     viewModel: SafeSphereViewModel
 ) {
+    val colors = SafeSphereThemeColors
     val currentScreen by viewModel.currentScreen.collectAsState()
     val currentUser by viewModel.currentUser.collectAsState()
     val uiMessage by viewModel.uiMessage.collectAsState()
     val unreadCount by viewModel.unreadNotificationCount.collectAsState()
     val latestNotification by viewModel.latestNotification.collectAsState()
+    val isDarkTheme by viewModel.isDarkTheme.collectAsState()
     val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
     val scope = rememberCoroutineScope()
 
@@ -337,7 +346,7 @@ fun MainAppContent(
 
     Surface(
         modifier = Modifier.fillMaxSize(),
-        color = SafeSphereColors.Background
+        color = colors.background
     ) {
         // Background gradient effect
         Box(
@@ -346,8 +355,8 @@ fun MainAppContent(
                 .background(
                     Brush.verticalGradient(
                         colors = listOf(
-                            SafeSphereColors.Background,
-                            SafeSphereColors.BackgroundDark
+                            colors.background,
+                            colors.backgroundDark
                         )
                     )
                 )
@@ -453,7 +462,9 @@ fun MainAppContent(
                                 },
                                 onLogout = {
                                     viewModel.logout()
-                                }
+                                },
+                                isDarkTheme = isDarkTheme,
+                                onToggleTheme = { viewModel.toggleTheme() }
                             )
                         }
                     ) {
@@ -555,7 +566,7 @@ fun MainAppContent(
                         .align(Alignment.BottomCenter)
                         .padding(16.dp)
                         .zIndex(10f),
-                    containerColor = SafeSphereColors.Primary,
+                    containerColor = colors.primary,
                     contentColor = Color.White
                 ) {
                     Text(message)
@@ -580,6 +591,7 @@ fun BiometricLockScreen(
     onRetryBiometric: () -> Unit,
     onPasswordLogin: (email: String, password: String) -> Unit
 ) {
+    val colors = SafeSphereThemeColors
     var email by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
 
@@ -589,8 +601,8 @@ fun BiometricLockScreen(
             .background(
                 Brush.verticalGradient(
                     colors = listOf(
-                        SafeSphereColors.Background,
-                        SafeSphereColors.BackgroundDark
+                        colors.background,
+                        colors.backgroundDark
                     )
                 )
             ),
@@ -615,7 +627,7 @@ fun BiometricLockScreen(
                 text = "SafeSphere Locked",
                 fontSize = 28.sp,
                 fontWeight = FontWeight.Bold,
-                color = SafeSphereColors.TextPrimary
+                color = colors.textPrimary
             )
 
             Spacer(modifier = Modifier.height(8.dp))
@@ -625,7 +637,7 @@ fun BiometricLockScreen(
                 Text(
                     text = "Maximum biometric attempts reached.\nPlease enter your credentials.",
                     fontSize = 14.sp,
-                    color = SafeSphereColors.Error,
+                    color = colors.error,
                     textAlign = TextAlign.Center
                 )
 
@@ -658,7 +670,7 @@ fun BiometricLockScreen(
                     onClick = { onPasswordLogin(email, password) },
                     modifier = Modifier.fillMaxWidth(),
                     colors = ButtonDefaults.buttonColors(
-                        containerColor = SafeSphereColors.Primary
+                        containerColor = colors.primary
                     )
                 ) {
                     Text("Unlock")
@@ -668,7 +680,7 @@ fun BiometricLockScreen(
                 Text(
                     text = "Use fingerprint or face to unlock",
                     fontSize = 14.sp,
-                    color = SafeSphereColors.TextSecondary,
+                    color = colors.textSecondary,
                     textAlign = TextAlign.Center
                 )
 
@@ -678,13 +690,13 @@ fun BiometricLockScreen(
                     Text(
                         text = "Attempt $attempts of $maxAttempts failed",
                         fontSize = 12.sp,
-                        color = SafeSphereColors.Error
+                        color = colors.error
                     )
 
                     Text(
                         text = "${maxAttempts - attempts} attempts remaining",
                         fontSize = 12.sp,
-                        color = SafeSphereColors.TextSecondary
+                        color = colors.textSecondary
                     )
 
                     Spacer(modifier = Modifier.height(16.dp))
@@ -702,7 +714,7 @@ fun BiometricLockScreen(
                     onClick = onRetryBiometric,
                     enabled = attempts < maxAttempts,
                     colors = ButtonDefaults.buttonColors(
-                        containerColor = SafeSphereColors.Primary
+                        containerColor = colors.primary
                     )
                 ) {
                     Text("Try Again")
@@ -723,11 +735,13 @@ fun BeautifulTopBar(
     onNotificationClick: () -> Unit,
     unreadCount: Int = 0
 ) {
+    val colors = SafeSphereThemeColors
+
     Surface(
         modifier = Modifier
             .fillMaxWidth()
             .height(80.dp),
-        color = SafeSphereColors.Surface.copy(alpha = 0.95f),
+        color = colors.surface.copy(alpha = 0.95f),
         shadowElevation = 4.dp
     ) {
         Box(
@@ -736,9 +750,9 @@ fun BeautifulTopBar(
                 .background(
                     Brush.horizontalGradient(
                         colors = listOf(
-                            SafeSphereColors.Primary.copy(alpha = 0.1f),
-                            SafeSphereColors.Secondary.copy(alpha = 0.1f),
-                            SafeSphereColors.Accent.copy(alpha = 0.1f)
+                            colors.primary.copy(alpha = 0.1f),
+                            colors.secondary.copy(alpha = 0.1f),
+                            colors.accent.copy(alpha = 0.1f)
                         )
                     )
                 )
@@ -761,13 +775,13 @@ fun BeautifulTopBar(
                         modifier = Modifier
                             .size(40.dp)
                             .clip(CircleShape)
-                            .background(SafeSphereColors.Primary.copy(alpha = 0.1f)),
+                            .background(colors.primary.copy(alpha = 0.1f)),
                         contentAlignment = Alignment.Center
                     ) {
                         Icon(
                             imageVector = Icons.Filled.Menu,
                             contentDescription = "Menu",
-                            tint = SafeSphereColors.Primary,
+                            tint = colors.primary,
                             modifier = Modifier.size(24.dp)
                         )
                     }
@@ -781,9 +795,9 @@ fun BeautifulTopBar(
                     style = androidx.compose.ui.text.TextStyle(
                         brush = Brush.linearGradient(
                             colors = listOf(
-                                SafeSphereColors.Primary,
-                                SafeSphereColors.Secondary,
-                                SafeSphereColors.Accent
+                                colors.primary,
+                                colors.secondary,
+                                colors.accent
                             )
                         )
                     ),
@@ -1060,31 +1074,32 @@ fun getScreenTitle(screen: SafeSphereScreen): String {
  */
 @Composable
 fun OnboardingScreen(viewModel: SafeSphereViewModel) {
+    val colors = SafeSphereThemeColors
     var currentPage by remember { mutableStateOf(0) }
     val pages = listOf(
         OnboardingPage(
             title = "Welcome to SafeSphere",
             description = "Your privacy fortress. All data stays on your device, encrypted with military-grade AES-256.",
             icon = "🔐",
-            color = SafeSphereColors.Primary
+            color = colors.primary
         ),
         OnboardingPage(
             title = "Offline AI Power",
             description = "AI runs entirely on your device. No cloud, no tracking, no data leaks. Complete privacy.",
             icon = "🤖",
-            color = SafeSphereColors.Secondary
+            color = colors.secondary
         ),
         OnboardingPage(
             title = "Hardware Encryption",
             description = "Your encryption keys are stored in secure hardware. Even if someone steals your phone, they can't access your data.",
             icon = "🛡️",
-            color = SafeSphereColors.Accent
+            color = colors.accent
         ),
         OnboardingPage(
             title = "You're in Control",
             description = "No backdoors. No cloud sync. No tracking. Your data belongs to you, and only you.",
             icon = "✨",
-            color = SafeSphereColors.Success
+            color = colors.success
         )
     )
 
@@ -1107,8 +1122,8 @@ fun OnboardingScreen(viewModel: SafeSphereViewModel) {
                         .size(if (index == currentPage) 32.dp else 8.dp, 8.dp)
                         .clip(CircleShape)
                         .background(
-                            if (index == currentPage) SafeSphereColors.Primary
-                            else SafeSphereColors.TextSecondary.copy(alpha = 0.3f)
+                            if (index == currentPage) colors.primary
+                            else colors.textSecondary.copy(alpha = 0.3f)
                         )
                         .animateContentSize()
                 )
@@ -1132,7 +1147,7 @@ fun OnboardingScreen(viewModel: SafeSphereViewModel) {
                 text = page.title,
                 fontSize = 28.sp,
                 fontWeight = FontWeight.Bold,
-                color = SafeSphereColors.TextPrimary,
+                color = colors.textPrimary,
                 textAlign = TextAlign.Center
             )
 
@@ -1141,7 +1156,7 @@ fun OnboardingScreen(viewModel: SafeSphereViewModel) {
             Text(
                 text = page.description,
                 fontSize = 16.sp,
-                color = SafeSphereColors.TextSecondary,
+                color = colors.textSecondary,
                 textAlign = TextAlign.Center,
                 lineHeight = 24.sp,
                 modifier = Modifier.padding(horizontal = 16.dp)
@@ -1199,6 +1214,8 @@ fun QuickActionButton(
     color: Color,
     onClick: () -> Unit
 ) {
+    val colors = SafeSphereThemeColors
+
     Box(
         modifier = Modifier
             .fillMaxWidth()
@@ -1227,7 +1244,7 @@ fun QuickActionButton(
                 text = label,
                 fontSize = 13.sp,
                 fontWeight = FontWeight.Medium,
-                color = SafeSphereColors.TextPrimary
+                color = colors.textPrimary
             )
         }
     }
@@ -1238,6 +1255,7 @@ fun QuickActionButton(
  */
 @Composable
 fun DashboardScreen(viewModel: SafeSphereViewModel) {
+    val colors = SafeSphereThemeColors
     val isOffline by viewModel.isOfflineMode.collectAsState()
     val stats by viewModel.storageStats.collectAsState()
     val vaultItems by viewModel.vaultItems.collectAsState()
@@ -1280,8 +1298,6 @@ fun DashboardScreen(viewModel: SafeSphereViewModel) {
     ) {
         // Security Score Card
         // Security Score Card - CENTERED VERSION
-// Copy this entire section to replace the existing Security Score Card in SafeSphereMainActivity.kt
-// Location: Around line 1215-1260
 
         GlassCard(
             modifier = Modifier.fillMaxWidth()
@@ -1293,14 +1309,14 @@ fun DashboardScreen(viewModel: SafeSphereViewModel) {
                 Text(
                     text = "Security Score",
                     fontSize = 16.sp,
-                    color = SafeSphereColors.TextSecondary
+                    color = colors.textSecondary
                 )
 
                 Spacer(modifier = Modifier.height(12.dp))
 
                 // ✅ FIXED: Added .fillMaxWidth() to center the circle
                 Box(
-                    modifier = Modifier.fillMaxWidth(),  // ← THIS IS THE FIX
+                    modifier = Modifier.fillMaxWidth(),
                     contentAlignment = Alignment.Center
                 ) {
                     CircularProgressIndicator(
@@ -1308,18 +1324,18 @@ fun DashboardScreen(viewModel: SafeSphereViewModel) {
                         modifier = Modifier.size(120.dp),
                         strokeWidth = 12.dp,
                         color = when {
-                            stats.securityScore >= 90 -> SafeSphereColors.Success
-                            stats.securityScore >= 70 -> SafeSphereColors.Warning
-                            else -> SafeSphereColors.Error
+                            stats.securityScore >= 90 -> colors.success
+                            stats.securityScore >= 70 -> colors.warning
+                            else -> colors.error
                         },
-                        trackColor = SafeSphereColors.TextSecondary.copy(alpha = 0.1f)
+                        trackColor = colors.textSecondary.copy(alpha = 0.1f)
                     )
 
                     Text(
                         text = "${stats.securityScore}",
                         fontSize = 36.sp,
                         fontWeight = FontWeight.Bold,
-                        color = SafeSphereColors.TextPrimary
+                        color = colors.textPrimary
                     )
                 }
 
@@ -1328,20 +1344,10 @@ fun DashboardScreen(viewModel: SafeSphereViewModel) {
                 Text(
                     text = "${stats.encryptedItems} of ${stats.totalItems} items encrypted",
                     fontSize = 14.sp,
-                    color = SafeSphereColors.TextSecondary
+                    color = colors.textSecondary
                 )
             }
         }
-
-        /*
-        INSTRUCTIONS:
-        1. Open SafeSphereMainActivity.kt
-        2. Find "// Security Score Card" (around line 1215)
-        3. Select the entire GlassCard block for Security Score
-        4. Replace it with the code above
-        5. Build: ./gradlew assembleDebug
-        6. The circle will now be centered!
-        */
 
         Spacer(modifier = Modifier.height(16.dp))
         
@@ -1382,13 +1388,13 @@ fun DashboardScreen(viewModel: SafeSphereViewModel) {
                             text = "🔐 Password Health",
                             fontSize = 18.sp,
                             fontWeight = FontWeight.Bold,
-                            color = SafeSphereColors.TextPrimary
+                            color = colors.textPrimary
                         )
 
                         Icon(
                             imageVector = Icons.Filled.ArrowForward,
                             contentDescription = "View Details",
-                            tint = SafeSphereColors.Primary,
+                            tint = colors.primary,
                             modifier = Modifier.size(20.dp)
                         )
                     }
@@ -1448,7 +1454,7 @@ fun DashboardScreen(viewModel: SafeSphereViewModel) {
                                     health.overallScore >= 60 -> Color(0xFFFBC02D)
                                     else -> Color(0xFFD32F2F)
                                 },
-                                trackColor = SafeSphereColors.TextSecondary.copy(alpha = 0.1f)
+                                trackColor = colors.textSecondary.copy(alpha = 0.1f)
                             )
 
                             Column(
@@ -1467,7 +1473,7 @@ fun DashboardScreen(viewModel: SafeSphereViewModel) {
                                 Text(
                                     text = "/ 100",
                                     fontSize = 12.sp,
-                                    color = SafeSphereColors.TextSecondary
+                                    color = colors.textSecondary
                                 )
 
                             }
@@ -1492,14 +1498,14 @@ fun DashboardScreen(viewModel: SafeSphereViewModel) {
                                         Text(
                                             text = "⚠️ ${health.weakPasswords} weak",
                                             fontSize = 13.sp,
-                                            color = SafeSphereColors.TextSecondary
+                                            color = colors.textSecondary
                                         )
                                     }
                                     if (health.duplicatePasswords > 0) {
                                         Text(
                                             text = "❌ ${health.duplicatePasswords} duplicates",
                                             fontSize = 13.sp,
-                                            color = SafeSphereColors.TextSecondary
+                                            color = colors.textSecondary
                                         )
                                     }
                                 }
@@ -1524,7 +1530,7 @@ fun DashboardScreen(viewModel: SafeSphereViewModel) {
             text = "Quick Access",
             fontSize = 20.sp,
             fontWeight = FontWeight.Bold,
-            color = SafeSphereColors.TextPrimary,
+            color = colors.textPrimary,
             modifier = Modifier.padding(vertical = 8.dp)
         )
 
@@ -1546,7 +1552,7 @@ fun DashboardScreen(viewModel: SafeSphereViewModel) {
                     title = "Privacy Vault",
                     icon = "🔐",
                     description = "${stats.totalItems} items",
-                    color = SafeSphereColors.Primary,
+                    color = colors.primary,
                     onClick = { viewModel.navigateToScreen(SafeSphereScreen.PRIVACY_VAULT) },
                     modifier = Modifier.weight(1f)
                 )
@@ -1555,7 +1561,7 @@ fun DashboardScreen(viewModel: SafeSphereViewModel) {
                     title = "AI Chat",
                     icon = "💬",
                     description = "Offline advisor",
-                    color = SafeSphereColors.Secondary,
+                    color = colors.secondary,
                     onClick = { viewModel.navigateToScreen(SafeSphereScreen.AI_CHAT) },
                     modifier = Modifier.weight(1f)
                 )
@@ -1569,7 +1575,7 @@ fun DashboardScreen(viewModel: SafeSphereViewModel) {
                     title = "Data Map",
                     icon = "📊",
                     description = "Visualize storage",
-                    color = SafeSphereColors.Accent,
+                    color = colors.accent,
                     onClick = { viewModel.navigateToScreen(SafeSphereScreen.DATA_MAP) },
                     modifier = Modifier.weight(1f)
                 )
@@ -1578,7 +1584,7 @@ fun DashboardScreen(viewModel: SafeSphereViewModel) {
                     title = "Threats",
                     icon = "🛡️",
                     description = "Simulation zone",
-                    color = SafeSphereColors.Warning,
+                    color = colors.warning,
                     onClick = { viewModel.navigateToScreen(SafeSphereScreen.THREAT_SIMULATION) },
                     modifier = Modifier.weight(1f)
                 )
@@ -1588,7 +1594,7 @@ fun DashboardScreen(viewModel: SafeSphereViewModel) {
                 title = "Manage AI Models",
                 icon = "🧠",
                 description = "Download offline AI",
-                color = SafeSphereColors.Info,
+                color = colors.info,
                 onClick = { viewModel.navigateToScreen(SafeSphereScreen.MODELS) },
                 modifier = Modifier.fillMaxWidth()
             )
@@ -1724,6 +1730,8 @@ fun DashboardCard(
     onClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val colors = SafeSphereThemeColors
+
     GlassCard(
         modifier = modifier
             .height(120.dp)
@@ -1758,13 +1766,13 @@ fun DashboardCard(
                     text = title,
                     fontSize = 16.sp,
                     fontWeight = FontWeight.SemiBold,
-                    color = SafeSphereColors.TextPrimary
+                    color = colors.textPrimary
                 )
 
                 Text(
                     text = description,
                     fontSize = 12.sp,
-                    color = SafeSphereColors.TextSecondary
+                    color = colors.textSecondary
                 )
             }
         }

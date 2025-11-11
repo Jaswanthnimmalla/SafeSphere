@@ -745,78 +745,68 @@ private data class FeatureHighlight(
 )
 
 /**
- * Features Grid
+ * Features Grid - 3 icons per row (2 rows), AI Models as card
  */
 @Composable
 private fun FeaturesGrid(viewModel: SafeSphereViewModel, analytics: DashboardAnalytics) {
-    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+    Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+        // First row - 3 circular icons
         Row(
             modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(12.dp)
+            horizontalArrangement = Arrangement.SpaceEvenly
         ) {
-            FeatureCard(
+            CircularFeatureIcon(
                 icon = "🔐",
                 title = "Privacy Vault",
-                description = "${analytics.totalVaultItems} items",
+                subtitle = "${analytics.totalVaultItems} items",
                 color = SafeSphereColors.Primary,
-                onClick = { viewModel.navigateToScreen(SafeSphereScreen.PRIVACY_VAULT) },
-                modifier = Modifier.weight(1f)
+                onClick = { viewModel.navigateToScreen(SafeSphereScreen.PRIVACY_VAULT) }
             )
-            FeatureCard(
+            CircularFeatureIcon(
                 icon = "🗝️",
                 title = "Passwords",
-                description = "${analytics.totalPasswords} saved",
+                subtitle = "${analytics.totalPasswords} saved",
                 color = SafeSphereColors.Secondary,
-                onClick = { viewModel.navigateToScreen(SafeSphereScreen.PASSWORDS) },
-                modifier = Modifier.weight(1f)
+                onClick = { viewModel.navigateToScreen(SafeSphereScreen.PASSWORDS) }
             )
-        }
-
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            FeatureCard(
+            CircularFeatureIcon(
                 icon = "💬",
                 title = "AI Assistant",
-                description = "Offline chat",
+                subtitle = "Offline chat",
                 color = SafeSphereColors.Accent,
-                onClick = { viewModel.navigateToScreen(SafeSphereScreen.AI_CHAT) },
-                modifier = Modifier.weight(1f)
-            )
-            FeatureCard(
-                icon = "📊",
-                title = "Data Insights",
-                description = "Visualize data",
-                color = Color(0xFFFFC107),
-                onClick = { viewModel.navigateToScreen(SafeSphereScreen.DATA_MAP) },
-                modifier = Modifier.weight(1f)
+                onClick = { viewModel.navigateToScreen(SafeSphereScreen.AI_CHAT) }
             )
         }
 
+        // Second row - 3 circular icons
         Row(
             modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(12.dp)
+            horizontalArrangement = Arrangement.SpaceEvenly
         ) {
-            FeatureCard(
+            CircularFeatureIcon(
+                icon = "📊",
+                title = "Data Insights",
+                subtitle = "Visualize data",
+                color = Color(0xFFFFC107),
+                onClick = { viewModel.navigateToScreen(SafeSphereScreen.DATA_MAP) }
+            )
+            CircularFeatureIcon(
                 icon = "🛡️",
                 title = "Threats",
-                description = "Learn security",
+                subtitle = "Learn security",
                 color = Color(0xFFFF5722),
-                onClick = { viewModel.navigateToScreen(SafeSphereScreen.THREAT_SIMULATION) },
-                modifier = Modifier.weight(1f)
+                onClick = { viewModel.navigateToScreen(SafeSphereScreen.THREAT_SIMULATION) }
             )
-            FeatureCard(
+            CircularFeatureIcon(
                 icon = "🤖",
                 title = "AI Predictor",
-                description = "Risk analysis",
+                subtitle = "Risk analysis",
                 color = Color(0xFF9C27B0),
-                onClick = { viewModel.navigateToScreen(SafeSphereScreen.AI_PREDICTOR) },
-                modifier = Modifier.weight(1f)
+                onClick = { viewModel.navigateToScreen(SafeSphereScreen.AI_PREDICTOR) }
             )
         }
 
-        // Full width card for Models
+        // Full width card for AI Models
         FeatureCard(
             icon = "🧠",
             title = "AI Models",
@@ -824,6 +814,88 @@ private fun FeaturesGrid(viewModel: SafeSphereViewModel, analytics: DashboardAna
             color = SafeSphereColors.Info,
             onClick = { viewModel.navigateToScreen(SafeSphereScreen.MODELS) },
             modifier = Modifier.fillMaxWidth()
+        )
+    }
+}
+
+/**
+ * Circular Feature Icon with name below
+ */
+@Composable
+private fun CircularFeatureIcon(
+    icon: String,
+    title: String,
+    subtitle: String,
+    color: Color,
+    onClick: () -> Unit
+) {
+    Column(
+        modifier = Modifier
+            .width(80.dp)
+            .clickable(onClick = onClick),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        // Circular icon with gradient background
+        Box(
+            modifier = Modifier
+                .size(72.dp)
+                .clip(CircleShape)
+                .background(
+                    Brush.radialGradient(
+                        colors = listOf(
+                            color.copy(alpha = 0.3f),
+                            color.copy(alpha = 0.15f)
+                        )
+                    )
+                )
+                .border(
+                    width = 2.dp,
+                    brush = Brush.linearGradient(
+                        colors = listOf(
+                            color.copy(alpha = 0.5f),
+                            color.copy(alpha = 0.2f)
+                        )
+                    ),
+                    shape = CircleShape
+                ),
+            contentAlignment = Alignment.Center
+        ) {
+            Text(
+                text = icon,
+                fontSize = 36.sp
+            )
+
+            // Small dot indicator
+            Box(
+                modifier = Modifier
+                    .size(8.dp)
+                    .clip(CircleShape)
+                    .background(color)
+                    .align(Alignment.TopEnd)
+                    .offset(x = (-8).dp, y = 8.dp)
+            )
+        }
+
+        // Title
+        Text(
+            text = title,
+            fontSize = 12.sp,
+            fontWeight = FontWeight.Bold,
+            color = SafeSphereColors.TextPrimary,
+            textAlign = TextAlign.Center,
+            maxLines = 1,
+            overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
+        )
+
+        // Subtitle
+        Text(
+            text = subtitle,
+            fontSize = 10.sp,
+            color = SafeSphereColors.TextSecondary,
+            textAlign = TextAlign.Center,
+            maxLines = 1,
+            overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
         )
     }
 }

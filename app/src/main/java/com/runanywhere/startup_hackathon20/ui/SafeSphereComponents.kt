@@ -28,17 +28,19 @@ fun GlassCard(
     modifier: Modifier = Modifier,
     content: @Composable () -> Unit
 ) {
+    val colors = SafeSphereThemeColors
+
     Box(
         modifier = modifier
             .clip(RoundedCornerShape(16.dp))
-            .background(SafeSphereColors.Surface.copy(alpha = 0.6f))
+            .background(colors.surface.copy(alpha = 0.6f))
             .border(
                 width = 1.5.dp,
                 brush = androidx.compose.ui.graphics.Brush.linearGradient(
                     colors = listOf(
-                        SafeSphereColors.Primary.copy(alpha = 0.3f),
-                        SafeSphereColors.Secondary.copy(alpha = 0.3f),
-                        SafeSphereColors.Accent.copy(alpha = 0.3f)
+                        colors.primary.copy(alpha = 0.3f),
+                        colors.secondary.copy(alpha = 0.3f),
+                        colors.accent.copy(alpha = 0.3f)
                     )
                 ),
                 shape = RoundedCornerShape(16.dp)
@@ -60,34 +62,36 @@ fun GlassButton(
     primary: Boolean = false,
     enabled: Boolean = true
 ) {
+    val colors = SafeSphereThemeColors
+
     val backgroundColor = if (primary) {
         // Vibrant gradient background for primary buttons
         Brush.linearGradient(
             colors = listOf(
-                SafeSphereColors.Primary,
-                SafeSphereColors.Primary.copy(alpha = 0.85f)
+                colors.primary,
+                colors.primary.copy(alpha = 0.85f)
             )
         )
     } else {
         // Solid background for secondary buttons with better visibility
         Brush.linearGradient(
             colors = listOf(
-                SafeSphereColors.Surface.copy(alpha = 0.9f),
-                SafeSphereColors.SurfaceVariant.copy(alpha = 0.8f)
+                colors.surface.copy(alpha = 0.9f),
+                colors.surfaceVariant.copy(alpha = 0.8f)
             )
         )
     }
 
     val borderColor = if (primary) {
-        SafeSphereColors.Primary.copy(alpha = 0.6f)
+        colors.primary.copy(alpha = 0.6f)
     } else {
-        SafeSphereColors.Primary.copy(alpha = 0.3f)
+        colors.primary.copy(alpha = 0.3f)
     }
 
     val textColor = if (primary) {
         Color.White
     } else {
-        if (enabled) SafeSphereColors.Primary else SafeSphereColors.TextSecondary
+        if (enabled) colors.primary else colors.textSecondary
     }
 
     Box(
@@ -128,10 +132,12 @@ fun SafeSphereHeader(
     onActionClick: (() -> Unit)? = null,
     actionIcon: String? = null
 ) {
+    val colors = SafeSphereThemeColors
+
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .background(SafeSphereColors.Surface.copy(alpha = 0.8f))
+            .background(colors.surface.copy(alpha = 0.8f))
             .padding(horizontal = 16.dp, vertical = 20.dp)
     ) {
         Row(
@@ -149,14 +155,14 @@ fun SafeSphereHeader(
                         modifier = Modifier
                             .size(40.dp)
                             .clip(RoundedCornerShape(10.dp))
-                            .background(SafeSphereColors.SurfaceVariant)
+                            .background(colors.surfaceVariant)
                             .clickable(onClick = it),
                         contentAlignment = Alignment.Center
                     ) {
                         Text(
                             text = "←",
                             fontSize = 24.sp,
-                            color = SafeSphereColors.TextPrimary
+                            color = colors.textPrimary
                         )
                     }
                 }
@@ -167,14 +173,14 @@ fun SafeSphereHeader(
                         text = title,
                         fontSize = 24.sp,
                         fontWeight = FontWeight.Bold,
-                        color = SafeSphereColors.TextPrimary
+                        color = colors.textPrimary
                     )
 
                     subtitle?.let {
                         Text(
                             text = it,
                             fontSize = 14.sp,
-                            color = SafeSphereColors.TextSecondary
+                            color = colors.textSecondary
                         )
                     }
                 }
@@ -189,7 +195,7 @@ fun SafeSphereHeader(
                         modifier = Modifier
                             .size(40.dp)
                             .clip(RoundedCornerShape(10.dp))
-                            .background(SafeSphereColors.Primary.copy(alpha = 0.8f))
+                            .background(colors.primary.copy(alpha = 0.8f))
                             .clickable(onClick = it),
                         contentAlignment = Alignment.Center
                     ) {
@@ -207,14 +213,14 @@ fun SafeSphereHeader(
                         modifier = Modifier
                             .size(40.dp)
                             .clip(RoundedCornerShape(10.dp))
-                            .background(SafeSphereColors.SurfaceVariant)
+                            .background(colors.surfaceVariant)
                             .clickable(onClick = it),
                         contentAlignment = Alignment.Center
                     ) {
                         Text(
                             text = "⚙",
                             fontSize = 20.sp,
-                            color = SafeSphereColors.TextPrimary
+                            color = colors.textPrimary
                         )
                     }
                 }
@@ -231,6 +237,8 @@ fun AddVaultItemDialog(
     onDismiss: () -> Unit,
     onSave: (title: String, content: String, category: VaultCategory) -> Unit
 ) {
+    val colors = SafeSphereThemeColors
+
     var title by remember { mutableStateOf("") }
     var content by remember { mutableStateOf("") }
     var selectedCategory by remember { mutableStateOf(VaultCategory.NOTES) }
@@ -251,7 +259,7 @@ fun AddVaultItemDialog(
                     text = "Add Encrypted Item",
                     fontSize = 20.sp,
                     fontWeight = FontWeight.Bold,
-                    color = SafeSphereColors.TextPrimary
+                    color = colors.textPrimary
                 )
 
                 Spacer(modifier = Modifier.height(20.dp))
@@ -260,7 +268,7 @@ fun AddVaultItemDialog(
                 Text(
                     text = "Title",
                     fontSize = 14.sp,
-                    color = SafeSphereColors.TextSecondary,
+                    color = colors.textSecondary,
                     modifier = Modifier.padding(bottom = 8.dp)
                 )
 
@@ -268,14 +276,14 @@ fun AddVaultItemDialog(
                     value = title,
                     onValueChange = { title = it },
                     textStyle = TextStyle(
-                        color = SafeSphereColors.TextPrimary,
+                        color = colors.textPrimary,
                         fontSize = 16.sp
                     ),
-                    cursorBrush = SolidColor(SafeSphereColors.Primary),
+                    cursorBrush = SolidColor(colors.primary),
                     modifier = Modifier
                         .fillMaxWidth()
                         .clip(RoundedCornerShape(12.dp))
-                        .background(SafeSphereColors.SurfaceVariant)
+                        .background(colors.surfaceVariant)
                         .padding(16.dp)
                 )
 
@@ -285,7 +293,7 @@ fun AddVaultItemDialog(
                 Text(
                     text = "Category",
                     fontSize = 14.sp,
-                    color = SafeSphereColors.TextSecondary,
+                    color = colors.textSecondary,
                     modifier = Modifier.padding(bottom = 8.dp)
                 )
 
@@ -293,7 +301,7 @@ fun AddVaultItemDialog(
                     modifier = Modifier
                         .fillMaxWidth()
                         .clip(RoundedCornerShape(12.dp))
-                        .background(SafeSphereColors.SurfaceVariant)
+                        .background(colors.surfaceVariant)
                         .clickable { showCategoryPicker = !showCategoryPicker }
                         .padding(16.dp)
                 ) {
@@ -308,7 +316,7 @@ fun AddVaultItemDialog(
                         Text(
                             text = selectedCategory.displayName,
                             fontSize = 16.sp,
-                            color = SafeSphereColors.TextPrimary
+                            color = colors.textPrimary
                         )
                     }
                 }
@@ -320,7 +328,7 @@ fun AddVaultItemDialog(
                         modifier = Modifier
                             .fillMaxWidth()
                             .clip(RoundedCornerShape(12.dp))
-                            .background(SafeSphereColors.SurfaceVariant)
+                            .background(colors.surfaceVariant)
                             .padding(8.dp)
                     ) {
                         VaultCategory.values().forEach { category ->
@@ -345,7 +353,7 @@ fun AddVaultItemDialog(
                                     Text(
                                         text = category.displayName,
                                         fontSize = 14.sp,
-                                        color = SafeSphereColors.TextPrimary
+                                        color = colors.textPrimary
                                     )
                                 }
                             }
@@ -359,7 +367,7 @@ fun AddVaultItemDialog(
                 Text(
                     text = "Content (will be encrypted)",
                     fontSize = 14.sp,
-                    color = SafeSphereColors.TextSecondary,
+                    color = colors.textSecondary,
                     modifier = Modifier.padding(bottom = 8.dp)
                 )
 
@@ -367,15 +375,15 @@ fun AddVaultItemDialog(
                     value = content,
                     onValueChange = { content = it },
                     textStyle = TextStyle(
-                        color = SafeSphereColors.TextPrimary,
+                        color = colors.textPrimary,
                         fontSize = 16.sp
                     ),
-                    cursorBrush = SolidColor(SafeSphereColors.Primary),
+                    cursorBrush = SolidColor(colors.primary),
                     modifier = Modifier
                         .fillMaxWidth()
                         .height(120.dp)
                         .clip(RoundedCornerShape(12.dp))
-                        .background(SafeSphereColors.SurfaceVariant)
+                        .background(colors.surfaceVariant)
                         .padding(16.dp)
                 )
 
@@ -418,6 +426,8 @@ fun ViewVaultItemDialog(
     viewModel: com.runanywhere.startup_hackathon20.viewmodels.SafeSphereViewModel,
     onDismiss: () -> Unit
 ) {
+    val colors = SafeSphereThemeColors
+
     var decryptedContent by remember { mutableStateOf<String?>(null) }
     var isLoading by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
@@ -521,7 +531,7 @@ fun ViewVaultItemDialog(
                             text = item.title,
                             fontSize = 20.sp,
                             fontWeight = FontWeight.Bold,
-                            color = SafeSphereColors.TextPrimary
+                            color = colors.textPrimary
                         )
 
                         Row(
@@ -536,7 +546,7 @@ fun ViewVaultItemDialog(
                             Text(
                                 text = item.category.displayName,
                                 fontSize = 14.sp,
-                                color = SafeSphereColors.TextSecondary
+                                color = colors.textSecondary
                             )
                         }
                     }
@@ -570,12 +580,12 @@ fun ViewVaultItemDialog(
                                     text = "Authentication Required",
                                     fontSize = 16.sp,
                                     fontWeight = FontWeight.Bold,
-                                    color = SafeSphereColors.TextPrimary
+                                    color = colors.textPrimary
                                 )
                                 Text(
                                     text = "Please unlock with fingerprint or PIN",
                                     fontSize = 13.sp,
-                                    color = SafeSphereColors.TextSecondary,
+                                    color = colors.textSecondary,
                                     textAlign = TextAlign.Center
                                 )
                             }
@@ -594,12 +604,12 @@ fun ViewVaultItemDialog(
                                 verticalArrangement = Arrangement.spacedBy(8.dp)
                             ) {
                                 CircularProgressIndicator(
-                                    color = SafeSphereColors.Primary
+                                    color = colors.primary
                                 )
                                 Text(
                                     text = "Decrypting...",
                                     fontSize = 14.sp,
-                                    color = SafeSphereColors.TextSecondary
+                                    color = colors.textSecondary
                                 )
                             }
                         }
@@ -620,7 +630,7 @@ fun ViewVaultItemDialog(
                             Text(
                                 text = error ?: "Authentication failed",
                                 fontSize = 14.sp,
-                                color = SafeSphereColors.Error,
+                                color = colors.error,
                                 textAlign = TextAlign.Center
                             )
                         }
@@ -631,7 +641,7 @@ fun ViewVaultItemDialog(
                             Text(
                                 text = "Decrypted Content",
                                 fontSize = 14.sp,
-                                color = SafeSphereColors.TextSecondary,
+                                color = colors.textSecondary,
                                 modifier = Modifier.padding(bottom = 8.dp)
                             )
 
@@ -639,13 +649,13 @@ fun ViewVaultItemDialog(
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .clip(RoundedCornerShape(12.dp))
-                                    .background(SafeSphereColors.SurfaceVariant)
+                                    .background(colors.surfaceVariant)
                                     .padding(16.dp)
                             ) {
                                 Text(
                                     text = decryptedContent ?: "",
                                     fontSize = 16.sp,
-                                    color = SafeSphereColors.TextPrimary
+                                    color = colors.textPrimary
                                 )
                             }
                         }
