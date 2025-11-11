@@ -494,8 +494,8 @@ private fun AutoScrollingFeatureCarousel(viewModel: SafeSphereViewModel) {
             ),
             FeatureHighlight(
                 icon = "🤖",
-                title = "Offline AI Assistant",
-                description = "Privacy AI runs on-device",
+                title = "Privacy AI",
+                description = "Offline AI runs on-device",
                 gradient = listOf(Color(0xFF00BCD4), Color(0xFF0097A7)),
                 screen = SafeSphereScreen.AI_CHAT
             ),
@@ -771,7 +771,7 @@ private fun FeaturesGrid(viewModel: SafeSphereViewModel, analytics: DashboardAna
             )
             CircularFeatureIcon(
                 icon = "💬",
-                title = "AI Assistant",
+                title = "Privacy AI",
                 subtitle = "Offline chat",
                 color = SafeSphereColors.Accent,
                 onClick = { viewModel.navigateToScreen(SafeSphereScreen.AI_CHAT) }

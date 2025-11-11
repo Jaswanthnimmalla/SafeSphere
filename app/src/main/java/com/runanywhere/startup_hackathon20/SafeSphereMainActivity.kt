@@ -1052,7 +1052,7 @@ fun getScreenTitle(screen: SafeSphereScreen): String {
     return when (screen) {
         SafeSphereScreen.DASHBOARD -> "SafeSphere"
         SafeSphereScreen.PRIVACY_VAULT -> "Privacy Vault"
-        SafeSphereScreen.AI_CHAT -> "AI Assistant"
+        SafeSphereScreen.AI_CHAT -> "Privacy AI"
         SafeSphereScreen.DATA_MAP -> "Data Insights"
         SafeSphereScreen.THREAT_SIMULATION -> "Security Training"
         SafeSphereScreen.SETTINGS -> "Settings"

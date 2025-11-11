@@ -137,14 +137,20 @@ class SafeSphereViewModel(application: Application) : AndroidViewModel(applicati
      */
     private fun initializeWelcomeMessage() {
         val welcomeMessage = SafeSphereChatMessage(
-            content = "🔐 Welcome to SafeSphere's Privacy Advisor!\n\n" +
-                    "I'm your offline AI assistant running entirely on your device. " +
-                    "I can help you with:\n\n" +
-                    "• Understanding data privacy\n" +
-                    "• Encryption best practices\n" +
-                    "• Threat prevention tips\n" +
-                    "• Secure storage advice\n\n" +
-                    "Your conversations never leave your device. What would you like to know?",
+            content = "👋 Welcome to Privacy AI!\n\n" +
+                    "I'm your completely offline AI assistant. All conversations stay on your device - no internet required!\n\n" +
+                    "🤖 What I can help with:\n" +
+                    "• Privacy & encryption questions\n" +
+                    "• Security best practices\n" +
+                    "• SafeSphere features explained\n" +
+                    "• Data protection advice\n" +
+                    "• Threat prevention tips\n\n" +
+                    "💡 First time setup:\n" +
+                    "1. Tap Menu (☰) → AI Models\n" +
+                    "2. Download a model (try SafeSphere Privacy Advisor)\n" +
+                    "3. Tap '▶️ Load Model for Privacy AI'\n" +
+                    "4. Come back and ask me anything!\n\n" +
+                    "🔒 100% Private: All AI responses are generated offline using advanced language models running directly on your device.",
             isUser = false,
             timestamp = System.currentTimeMillis()
         )
@@ -285,8 +291,11 @@ class SafeSphereViewModel(application: Application) : AndroidViewModel(applicati
 
         viewModelScope.launch(Dispatchers.IO) {
             try {
-                // Add user message
+                // Add user message with unique ID
+                val userMessageId =
+                    "user_${System.currentTimeMillis()}_${kotlin.random.Random.nextInt(1000, 9999)}"
                 val userChatMessage = SafeSphereChatMessage(
+                    id = userMessageId,
                     content = userMessage,
                     isUser = true,
                     timestamp = System.currentTimeMillis()
@@ -296,20 +305,13 @@ class SafeSphereViewModel(application: Application) : AndroidViewModel(applicati
                 // Start generation
                 _isGenerating.value = true
 
-                // Privacy-focused system prompt
-                val systemPrompt = """You are a privacy and security advisor for SafeSphere, 
-                    |an offline-first privacy protection app. You help users understand:
-                    |- Data encryption and privacy
-                    |- Offline-first security benefits
-                    |- Threat prevention
-                    |- Best practices for protecting personal data
-                    |Keep responses concise, helpful, and focused on privacy education.""".trimMargin()
+                // Small delay to ensure different timestamp
+                delay(10)
 
-                val fullPrompt = "$systemPrompt\n\nUser: $userMessage\n\nAssistant:"
-
-                // Create AI response message
-                val aiMessageId = System.currentTimeMillis().toString()
-                var aiResponse = ""
+                // Create AI response message with unique ID
+                val aiMessageId =
+                    "ai_${System.currentTimeMillis()}_${kotlin.random.Random.nextInt(1000, 9999)}"
+                var previousContent = ""
 
                 val aiMessage = SafeSphereChatMessage(
                     id = aiMessageId,
@@ -319,15 +321,22 @@ class SafeSphereViewModel(application: Application) : AndroidViewModel(applicati
                 )
                 _chatMessages.value = _chatMessages.value + aiMessage
 
-                // Stream response from local AI model using RunAnywhere SDK
-                RunAnywhere.generateStream(fullPrompt).collect { token ->
-                    aiResponse += token
-                    // Update message with streaming content
-                    _chatMessages.value = _chatMessages.value.map {
-                        if (it.id == aiMessageId) it.copy(content = aiResponse.trim())
-                        else it
+                // Use OllamaAI helper for clean responses
+                com.runanywhere.startup_hackathon20.ai.OllamaAI.generateResponse(userMessage)
+                    .collect { cleanedResponse ->
+                        // Only update if content has actually changed
+                        if (cleanedResponse != previousContent && cleanedResponse.isNotEmpty()) {
+                            previousContent = cleanedResponse
+                            // CRITICAL: Only update the AI message, not the user message
+                            _chatMessages.value = _chatMessages.value.map { message ->
+                                if (message.id == aiMessageId && !message.isUser) {
+                                    message.copy(content = cleanedResponse)
+                                } else {
+                                    message  // Keep all other messages unchanged
+                                }
+                            }
+                        }
                     }
-                }
 
                 _isGenerating.value = false
 
@@ -336,11 +345,13 @@ class SafeSphereViewModel(application: Application) : AndroidViewModel(applicati
                 _isGenerating.value = false
 
                 val errorMessage = SafeSphereChatMessage(
-                    content = "⚠️ AI model not loaded. Please download a model first:\n" +
-                            "1. Tap 'Models' tab\n" +
-                            "2. Download 'SafeSphere Privacy Advisor'\n" +
-                            "3. Tap 'Load' on the model\n" +
-                            "4. Return here to chat",
+                    content = "⚠️ Offline AI model not loaded yet.\n\n" +
+                            "Quick Setup:\n" +
+                            "1. Tap Menu (☰) → AI Models\n" +
+                            "2. Tap '⬇️ Download Both Models' (or choose one)\n" +
+                            "3. Tap '▶️ Load Model for Privacy AI'\n" +
+                            "4. Return here and ask your question again\n\n" +
+                            "💡 The AI runs completely offline on your device - no internet needed after download!",
                     isUser = false,
                     timestamp = System.currentTimeMillis()
                 )

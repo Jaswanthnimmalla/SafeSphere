@@ -239,7 +239,7 @@ private fun EnhancedChatHeader(
 
                     Column {
                         Text(
-                            text = "AI Privacy Advisor",
+                            text = "Privacy AI",
                             fontSize = 18.sp,
                             fontWeight = FontWeight.Bold,
                             color = SafeSphereColors.TextPrimary
@@ -461,119 +461,132 @@ private fun EnhancedChatBubble(
         modifier = Modifier.fillMaxWidth(),
         contentAlignment = alignment
     ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth(0.85f),
-            horizontalArrangement = if (message.isUser) Arrangement.End else Arrangement.Start
+        Column(
+            modifier = Modifier.fillMaxWidth(0.85f),
+            horizontalAlignment = if (message.isUser) Alignment.End else Alignment.Start
         ) {
-            // AI Avatar
-            if (!message.isUser) {
-                Box(
-                    modifier = Modifier
-                        .size(40.dp)
-                        .clip(CircleShape)
-                        .background(
-                            Brush.linearGradient(
-                                colors = listOf(
-                                    SafeSphereColors.Primary.copy(alpha = 0.8f),
-                                    SafeSphereColors.Secondary.copy(alpha = 0.8f)
-                                )
-                            )
-                        ),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text(
-                        text = "🤖",
-                        fontSize = 20.sp
-                    )
-                }
+            // Label above the bubble (visual only)
+            Text(
+                text = if (message.isUser) "You" else "Privacy AI",
+                fontSize = 12.sp,
+                fontWeight = FontWeight.SemiBold,
+                color = SafeSphereColors.TextSecondary,
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)
+            )
 
-                Spacer(modifier = Modifier.width(10.dp))
-            }
-
-            // Message Bubble - wraps to content
-            Box(
-                modifier = Modifier
-                    .wrapContentWidth()
-                    .clip(
-                        RoundedCornerShape(
-                            topStart = if (message.isUser) 20.dp else 4.dp,
-                            topEnd = if (message.isUser) 4.dp else 20.dp,
-                            bottomStart = 20.dp,
-                            bottomEnd = 20.dp
-                        )
-                    )
-                    .background(
-                        // USER: Gradient blue | AI: Surface with no gradient
-                        if (message.isUser) {
-                            Brush.linearGradient(
-                                colors = listOf(
-                                    SafeSphereColors.Primary,
-                                    SafeSphereColors.Secondary
-                                )
-                            )
-                        } else {
-                            Brush.verticalGradient(
-                                colors = listOf(
-                                    SafeSphereColors.Surface,
-                                    SafeSphereColors.Surface
-                                )
-                            )
-                        }
-                    )
-                    .border(
-                        width = if (message.isUser) 0.dp else 1.5.dp,
-                        color = if (message.isUser) Color.Transparent
-                        else SafeSphereColors.Primary.copy(alpha = 0.3f),
-                        shape = RoundedCornerShape(
-                            topStart = if (message.isUser) 20.dp else 4.dp,
-                            topEnd = if (message.isUser) 4.dp else 20.dp,
-                            bottomStart = 20.dp,
-                            bottomEnd = 20.dp
-                        )
-                    )
-                    .padding(horizontal = 16.dp, vertical = 12.dp)
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = if (message.isUser) Arrangement.End else Arrangement.Start
             ) {
-                Column(
-                    verticalArrangement = Arrangement.spacedBy(6.dp)
-                ) {
-                    Text(
-                        text = message.content,
-                        fontSize = 15.sp,
-                        // USER: White text | AI: Primary text color
-                        color = if (message.isUser) Color.White else SafeSphereColors.TextPrimary,
-                        lineHeight = 22.sp
-                    )
+                // AI Avatar
+                if (!message.isUser) {
+                    Box(
+                        modifier = Modifier
+                            .size(40.dp)
+                            .clip(CircleShape)
+                            .background(
+                                Brush.linearGradient(
+                                    colors = listOf(
+                                        SafeSphereColors.Primary.copy(alpha = 0.8f),
+                                        SafeSphereColors.Secondary.copy(alpha = 0.8f)
+                                    )
+                                )
+                            ),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = "🤖",
+                            fontSize = 20.sp
+                        )
+                    }
 
-                    // Timestamp
-                    Text(
-                        text = formatTimestamp(message.timestamp),
-                        fontSize = 11.sp,
-                        color = if (message.isUser)
-                            Color.White.copy(alpha = 0.7f)
-                        else
-                            SafeSphereColors.TextSecondary.copy(alpha = 0.7f),
-                        textAlign = if (message.isUser) TextAlign.End else TextAlign.Start,
-                        modifier = Modifier.fillMaxWidth()
-                    )
+                    Spacer(modifier = Modifier.width(10.dp))
                 }
-            }
 
-            // User Avatar
-            if (message.isUser) {
-                Spacer(modifier = Modifier.width(10.dp))
-
+                // Message Bubble - wraps to content
                 Box(
                     modifier = Modifier
-                        .size(40.dp)
-                        .clip(CircleShape)
-                        .background(SafeSphereColors.Accent.copy(alpha = 0.3f)),
-                    contentAlignment = Alignment.Center
+                        .wrapContentWidth()
+                        .clip(
+                            RoundedCornerShape(
+                                topStart = if (message.isUser) 20.dp else 4.dp,
+                                topEnd = if (message.isUser) 4.dp else 20.dp,
+                                bottomStart = 20.dp,
+                                bottomEnd = 20.dp
+                            )
+                        )
+                        .background(
+                            // USER: Gradient blue | AI: Surface with no gradient
+                            if (message.isUser) {
+                                Brush.linearGradient(
+                                    colors = listOf(
+                                        SafeSphereColors.Primary,
+                                        SafeSphereColors.Secondary
+                                    )
+                                )
+                            } else {
+                                Brush.verticalGradient(
+                                    colors = listOf(
+                                        SafeSphereColors.Surface,
+                                        SafeSphereColors.Surface
+                                    )
+                                )
+                            }
+                        )
+                        .border(
+                            width = if (message.isUser) 0.dp else 1.5.dp,
+                            color = if (message.isUser) Color.Transparent
+                            else SafeSphereColors.Primary.copy(alpha = 0.3f),
+                            shape = RoundedCornerShape(
+                                topStart = if (message.isUser) 20.dp else 4.dp,
+                                topEnd = if (message.isUser) 4.dp else 20.dp,
+                                bottomStart = 20.dp,
+                                bottomEnd = 20.dp
+                            )
+                        )
+                        .padding(horizontal = 16.dp, vertical = 12.dp)
                 ) {
-                    Text(
-                        text = "👤",
-                        fontSize = 20.sp
-                    )
+                    Column(
+                        verticalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        Text(
+                            text = message.content,
+                            fontSize = 15.sp,
+                            // USER: White text | AI: Primary text color
+                            color = if (message.isUser) Color.White else SafeSphereColors.TextPrimary,
+                            lineHeight = 22.sp
+                        )
+
+                        // Timestamp
+                        Text(
+                            text = formatTimestamp(message.timestamp),
+                            fontSize = 11.sp,
+                            color = if (message.isUser)
+                                Color.White.copy(alpha = 0.7f)
+                            else
+                                SafeSphereColors.TextSecondary.copy(alpha = 0.7f),
+                            textAlign = if (message.isUser) TextAlign.End else TextAlign.Start,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                    }
+                }
+
+                // User Avatar
+                if (message.isUser) {
+                    Spacer(modifier = Modifier.width(10.dp))
+
+                    Box(
+                        modifier = Modifier
+                            .size(40.dp)
+                            .clip(CircleShape)
+                            .background(SafeSphereColors.Accent.copy(alpha = 0.3f)),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = "👤",
+                            fontSize = 20.sp
+                        )
+                    }
                 }
             }
         }

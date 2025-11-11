@@ -371,7 +371,7 @@ class AdvancedVoiceControlSystem(private val context: Context) {
             VoiceIntent.NAVIGATE_PASSWORDS -> "Opening password manager"
             VoiceIntent.NAVIGATE_VAULT -> "Opening privacy vault"
             VoiceIntent.NAVIGATE_SETTINGS -> "Opening settings"
-            VoiceIntent.NAVIGATE_AI_CHAT -> "Opening AI assistant"
+            VoiceIntent.NAVIGATE_AI_CHAT -> "Opening Privacy AI"
             VoiceIntent.CHECK_SECURITY -> "Checking security status"
             VoiceIntent.AI_PREDICTOR -> "Opening AI security predictor"
             VoiceIntent.ADD_PASSWORD -> {

@@ -47,6 +47,11 @@ fun EnhancedModelsScreen(viewModel: SafeSphereViewModel) {
     var downloadProgress by remember { mutableStateOf(0f) }
     var loadedModel by remember { mutableStateOf<String?>(null) }
 
+    // Batch download state
+    var isBatchDownloading by remember { mutableStateOf(false) }
+    var batchDownloadProgress by remember { mutableStateOf(0f) }
+    var currentDownloadingModelName by remember { mutableStateOf("") }
+
     // Real-time app data for NLP recommendations
     val stats by viewModel.storageStats.collectAsState()
     val vaultItems by viewModel.vaultItems.collectAsState()
@@ -73,6 +78,16 @@ fun EnhancedModelsScreen(viewModel: SafeSphereViewModel) {
             dataSizeMB = stats.totalSize / (1024.0 * 1024.0),
             estimatedSavingsUSD = chatMessages.size * 0.002
         )
+    }
+
+    // Check if both models are downloaded
+    val bothModelsDownloaded = remember(models) {
+        models.count { it.isDownloaded } >= 2
+    }
+
+    // Check if any model is loaded
+    val anyModelLoaded = remember(loadedModel) {
+        loadedModel != null
     }
 
     LaunchedEffect(Unit) {
@@ -114,6 +129,60 @@ fun EnhancedModelsScreen(viewModel: SafeSphereViewModel) {
                 contentPadding = PaddingValues(16.dp),
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
+                // QUICK SETUP CARD - Download & Load All
+                item {
+                    QuickSetupCard(
+                        bothModelsDownloaded = bothModelsDownloaded,
+                        anyModelLoaded = anyModelLoaded,
+                        isBatchDownloading = isBatchDownloading,
+                        batchDownloadProgress = batchDownloadProgress,
+                        currentDownloadingModelName = currentDownloadingModelName,
+                        onDownloadAll = {
+                            isBatchDownloading = true
+                            coroutineScope.launch {
+                                try {
+                                    // Download both models sequentially
+                                    models.filter { !it.isDownloaded }
+                                        .forEachIndexed { index, model ->
+                                            currentDownloadingModelName = model.name
+                                            RunAnywhere.downloadModel(model.id)
+                                                .collect { progress ->
+                                                    // Calculate overall progress
+                                                    val modelWeight =
+                                                        1f / models.filter { !it.isDownloaded }.size
+                                                    batchDownloadProgress =
+                                                        (index * modelWeight) + (progress * modelWeight)
+                                                }
+                                        }
+                                    // Refresh models list
+                                    models = listAvailableModels()
+                                    isBatchDownloading = false
+                                    batchDownloadProgress = 0f
+                                    currentDownloadingModelName = ""
+                                } catch (e: Exception) {
+                                    isBatchDownloading = false
+                                    batchDownloadProgress = 0f
+                                    currentDownloadingModelName = ""
+                                }
+                            }
+                        },
+                        onLoadForChat = {
+                            coroutineScope.launch {
+                                try {
+                                    // Load the first available model
+                                    val modelToLoad = models.firstOrNull { it.isDownloaded }
+                                    if (modelToLoad != null) {
+                                        RunAnywhere.loadModel(modelToLoad.id)
+                                        loadedModel = modelToLoad.id
+                                    }
+                                } catch (e: Exception) {
+                                    // Handle error
+                                }
+                            }
+                        }
+                    )
+                }
+
                 // Real-Time Analytics
                 item {
                     GlassCard(modifier = Modifier.fillMaxWidth()) {
@@ -199,6 +268,17 @@ fun EnhancedModelsScreen(viewModel: SafeSphereViewModel) {
                     }
                 }
 
+                // Divider
+                item {
+                    Text(
+                        text = "Individual Models",
+                        fontSize = 16.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = SafeSphereColors.TextSecondary,
+                        modifier = Modifier.padding(vertical = 8.dp)
+                    )
+                }
+
                 // Model Cards
                 items(models) { model ->
                     ModelCard(
@@ -233,6 +313,202 @@ fun EnhancedModelsScreen(viewModel: SafeSphereViewModel) {
                         },
                         onUnload = { loadedModel = null }
                     )
+                }
+            }
+        }
+    }
+}
+
+/**
+ * Quick Setup Card - Single button to download all and single button to load
+ */
+@Composable
+private fun QuickSetupCard(
+    bothModelsDownloaded: Boolean,
+    anyModelLoaded: Boolean,
+    isBatchDownloading: Boolean,
+    batchDownloadProgress: Float,
+    currentDownloadingModelName: String,
+    onDownloadAll: () -> Unit,
+    onLoadForChat: () -> Unit
+) {
+    GlassCard(
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Column(
+            modifier = Modifier.padding(24.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp)
+        ) {
+            // Header
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Text(text = "🚀", fontSize = 32.sp)
+                Column {
+                    Text(
+                        text = "Quick Setup",
+                        fontSize = 20.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = SafeSphereColors.TextPrimary
+                    )
+                    Text(
+                        text = "Get Privacy AI ready in 2 steps",
+                        fontSize = 14.sp,
+                        color = SafeSphereColors.TextSecondary
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            // Step 1: Download All Models
+            if (!bothModelsDownloaded) {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(32.dp)
+                                .clip(CircleShape)
+                                .background(SafeSphereColors.Primary),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = "1",
+                                fontSize = 16.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Color.White
+                            )
+                        }
+                        Text(
+                            text = "Download AI Models",
+                            fontSize = 16.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = SafeSphereColors.TextPrimary
+                        )
+                    }
+
+                    if (isBatchDownloading) {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(start = 40.dp),
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            LinearProgressIndicator(
+                                progress = { batchDownloadProgress },
+                                modifier = Modifier.fillMaxWidth(),
+                                color = SafeSphereColors.Primary,
+                            )
+                            Text(
+                                text = "Downloading: $currentDownloadingModelName\n${(batchDownloadProgress * 100).toInt()}% complete",
+                                fontSize = 12.sp,
+                                color = SafeSphereColors.TextSecondary
+                            )
+                        }
+                    } else {
+                        GlassButton(
+                            text = "⬇️ Download Both Models (493 MB)",
+                            onClick = onDownloadAll,
+                            primary = true,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(start = 40.dp)
+                        )
+                    }
+                }
+            } else {
+                // Models downloaded - show checkmark
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(SafeSphereColors.Success.copy(alpha = 0.1f))
+                        .padding(12.dp)
+                ) {
+                    Text(text = "✅", fontSize = 24.sp)
+                    Text(
+                        text = "Both models downloaded",
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = SafeSphereColors.Success
+                    )
+                }
+            }
+
+            // Step 2: Load for Chat
+            if (bothModelsDownloaded) {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(32.dp)
+                                .clip(CircleShape)
+                                .background(
+                                    if (anyModelLoaded) SafeSphereColors.Success
+                                    else SafeSphereColors.Primary
+                                ),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = "2",
+                                fontSize = 16.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Color.White
+                            )
+                        }
+                        Text(
+                            text = "Load for Chat",
+                            fontSize = 16.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = SafeSphereColors.TextPrimary
+                        )
+                    }
+
+                    if (anyModelLoaded) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(start = 40.dp)
+                                .clip(RoundedCornerShape(12.dp))
+                                .background(SafeSphereColors.Success.copy(alpha = 0.1f))
+                                .padding(12.dp)
+                        ) {
+                            Text(text = "✅", fontSize = 24.sp)
+                            Column {
+                                Text(
+                                    text = "Model loaded & ready!",
+                                    fontSize = 14.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = SafeSphereColors.Success
+                                )
+                                Text(
+                                    text = "Go to Privacy AI chat to start asking questions",
+                                    fontSize = 12.sp,
+                                    color = SafeSphereColors.TextSecondary
+                                )
+                            }
+                        }
+                    } else {
+                        GlassButton(
+                            text = "▶️ Load Model for Privacy AI",
+                            onClick = onLoadForChat,
+                            primary = true,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(start = 40.dp)
+                        )
+                    }
                 }
             }
         }
