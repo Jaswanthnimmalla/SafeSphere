@@ -31,11 +31,15 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
+import com.runanywhere.startup_hackathon20.data.P2PMessageRepository
 import com.runanywhere.startup_hackathon20.viewmodels.SafeSphereViewModel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.*
+import kotlin.collections.filter
+import kotlin.collections.find
+import kotlin.collections.isNotEmpty
 
 /**
  * 💬 P2P Offline Chat Screen
@@ -45,7 +49,7 @@ import java.util.*
  * - Auto-detects contacts from phone
  * - Discovers nearby SafeSphere users
  * - Search engine for contacts
- * - End-to-end encrypted messages
+ * - Real message persistence
  * - No internet required!
  */
 @Composable
@@ -56,6 +60,17 @@ fun P2PChatScreen(
     val colors = SafeSphereThemeColors
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
+
+    // Get message repository
+    val messageRepository = remember { P2PMessageRepository.getInstance(context) }
+    val conversations by messageRepository.conversations.collectAsState()
+    val unreadCounts by messageRepository.unreadCounts.collectAsState()
+
+    // Current user phone (in real app, get from user profile)
+    val currentUserPhone = remember {
+        context.getSharedPreferences("safesphere_prefs", Context.MODE_PRIVATE)
+            .getString("user_phone", "+1234567890") ?: "+1234567890"
+    }
 
     // States
     var hasContactsPermission by remember {
@@ -231,9 +246,9 @@ fun P2PChatScreen(
                         modifier = Modifier.weight(1f)
                     )
                     StatCard(
-                        icon = "📡",
-                        value = if (isDiscovering) "..." else "ON",
-                        label = "Discovery",
+                        icon = "💬",
+                        value = "${conversations.size}",
+                        label = "Chats",
                         color = Color(0xFFFF9800),
                         modifier = Modifier.weight(1f)
                     )
@@ -262,8 +277,10 @@ fun P2PChatScreen(
                 }
 
                 items(nearbyUsers) { user ->
+                    val unreadCount = unreadCounts[user.phone] ?: 0
                     NearbyUserCard(
                         user = user,
+                        unreadCount = unreadCount,
                         onClick = {
                             // Find contact or create temp
                             val contact = contacts.find { it.phone == user.phone }
@@ -292,9 +309,11 @@ fun P2PChatScreen(
                 }
 
                 items(filteredContacts) { contact ->
+                    val unreadCount = unreadCounts[contact.phone] ?: 0
                     ContactCard(
                         contact = contact,
                         isOnline = nearbyUsers.any { it.phone == contact.phone },
+                        unreadCount = unreadCount,
                         onClick = {
                             selectedContact = contact
                             showChatDialog = true
@@ -356,7 +375,11 @@ fun P2PChatScreen(
         ChatDialog(
             contact = selectedContact!!,
             isOnline = nearbyUsers.any { it.phone == selectedContact!!.phone },
-            onDismiss = { showChatDialog = false },
+            currentUserPhone = currentUserPhone,
+            messageRepository = messageRepository,
+            onDismiss = {
+                showChatDialog = false
+            },
             colors = colors
         )
     }
@@ -478,6 +501,7 @@ private fun StatCard(
 @Composable
 fun NearbyUserCard(
     user: NearbyUser,
+    unreadCount: Int,
     onClick: () -> Unit,
     colors: ThemeColors
 ) {
@@ -567,6 +591,21 @@ fun NearbyUserCard(
                 tint = Color(0xFF4CAF50),
                 modifier = Modifier.size(24.dp)
             )
+            if (unreadCount > 0) {
+                Box(
+                    modifier = Modifier
+                        .size(16.dp)
+                        .clip(CircleShape)
+                        .background(Color(0xFF4CAF50)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = unreadCount.toString(),
+                        fontSize = 10.sp,
+                        color = Color.White
+                    )
+                }
+            }
         }
     }
 }
@@ -578,6 +617,7 @@ fun NearbyUserCard(
 fun ContactCard(
     contact: ContactInfo,
     isOnline: Boolean,
+    unreadCount: Int,
     onClick: () -> Unit,
     colors: ThemeColors
 ) {
@@ -651,6 +691,21 @@ fun ContactCard(
                     )
                 }
             }
+            if (unreadCount > 0) {
+                Box(
+                    modifier = Modifier
+                        .size(16.dp)
+                        .clip(CircleShape)
+                        .background(Color(0xFF4CAF50)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = unreadCount.toString(),
+                        fontSize = 10.sp,
+                        color = Color.White
+                    )
+                }
+            }
         }
     }
 }
@@ -662,12 +717,25 @@ fun ContactCard(
 fun ChatDialog(
     contact: ContactInfo,
     isOnline: Boolean,
+    currentUserPhone: String,
+    messageRepository: P2PMessageRepository,
     onDismiss: () -> Unit,
     colors: ThemeColors
 ) {
-    var message by remember { mutableStateOf("") }
-    var messages by remember { mutableStateOf<List<ChatMessage>>(emptyList()) }
     val scope = rememberCoroutineScope()
+    
+    // Get messages from repository
+    val allConversations by messageRepository.conversations.collectAsState()
+    val messages = remember(allConversations) {
+        allConversations[contact.phone] ?: emptyList()
+    }
+    
+    var message by remember { mutableStateOf("") }
+
+    // Mark as read when opening
+    LaunchedEffect(contact.phone) {
+        messageRepository.markAsRead(contact.phone)
+    }
 
     androidx.compose.ui.window.Dialog(
         onDismissRequest = onDismiss,
@@ -750,7 +818,7 @@ fun ChatDialog(
                     reverseLayout = true
                 ) {
                     items(messages.asReversed()) { msg ->
-                        MessageBubble(msg, colors)
+                        MessageBubble(msg, colors, msg.fromPhone == currentUserPhone)
                         Spacer(modifier = Modifier.height(8.dp))
                     }
 
@@ -824,36 +892,9 @@ fun ChatDialog(
                     FloatingActionButton(
                         onClick = {
                             if (message.isNotBlank()) {
-                                // Add user's sent message
-                                messages = messages + ChatMessage(
-                                    content = message,
-                                    isSent = true,
-                                    timestamp = System.currentTimeMillis()
-                                )
-
-                                val userMessage = message
+                                // Send message using repository
+                                messageRepository.sendMessage(contact.phone, message)
                                 message = ""
-
-                                // Simulate remote user receiving and replying (offline mesh delivery)
-                                scope.launch {
-                                    delay(2000) // Simulate mesh network propagation delay
-
-                                    // Simulate auto-reply from remote user
-                                    val replies = listOf(
-                                        "Hey! Got your message via mesh network 📡",
-                                        "Received offline! This is amazing 🚀",
-                                        "Message delivered without internet! ✨",
-                                        "Offline messaging works perfectly 💬",
-                                        "Got it! Mesh network is awesome 🔥",
-                                        "Received via Bluetooth mesh! 📶"
-                                    )
-
-                                    messages = messages + ChatMessage(
-                                        content = replies.random(),
-                                        isSent = false,
-                                        timestamp = System.currentTimeMillis()
-                                    )
-                                }
                             }
                         },
                         modifier = Modifier.size(48.dp),
@@ -875,10 +916,14 @@ fun ChatDialog(
  * Message Bubble
  */
 @Composable
-fun MessageBubble(message: ChatMessage, colors: ThemeColors) {
+fun MessageBubble(
+    message: com.runanywhere.startup_hackathon20.data.P2PMessage,
+    colors: ThemeColors,
+    isSent: Boolean
+) {
     Row(
         modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = if (message.isSent) Arrangement.End else Arrangement.Start
+        horizontalArrangement = if (isSent) Arrangement.End else Arrangement.Start
     ) {
         Box(
             modifier = Modifier
@@ -887,12 +932,12 @@ fun MessageBubble(message: ChatMessage, colors: ThemeColors) {
                     RoundedCornerShape(
                         topStart = 16.dp,
                         topEnd = 16.dp,
-                        bottomStart = if (message.isSent) 16.dp else 4.dp,
-                        bottomEnd = if (message.isSent) 4.dp else 16.dp
+                        bottomStart = if (isSent) 16.dp else 4.dp,
+                        bottomEnd = if (isSent) 4.dp else 16.dp
                     )
                 )
                 .background(
-                    if (message.isSent)
+                    if (isSent)
                         Color(0xFF00BCD4)
                     else
                         colors.surfaceVariant
@@ -903,7 +948,7 @@ fun MessageBubble(message: ChatMessage, colors: ThemeColors) {
                 Text(
                     text = message.content,
                     fontSize = 14.sp,
-                    color = if (message.isSent) Color.White else colors.textPrimary,
+                    color = if (isSent) Color.White else colors.textPrimary,
                     lineHeight = 18.sp
                 )
                 Spacer(modifier = Modifier.height(4.dp))
@@ -913,7 +958,7 @@ fun MessageBubble(message: ChatMessage, colors: ThemeColors) {
                         Locale.getDefault()
                     ).format(Date(message.timestamp)),
                     fontSize = 10.sp,
-                    color = if (message.isSent) Color.White.copy(alpha = 0.7f) else colors.textSecondary
+                    color = if (isSent) Color.White.copy(alpha = 0.7f) else colors.textSecondary
                 )
             }
         }
@@ -1019,6 +1064,6 @@ data class NearbyUser(
 
 data class ChatMessage(
     val content: String,
-    val isSent: Boolean,
+    val sender: String,
     val timestamp: Long
 )
