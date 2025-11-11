@@ -826,11 +826,11 @@ private fun FeaturesGrid(viewModel: SafeSphereViewModel, analytics: DashboardAna
                 onClick = { viewModel.navigateToScreen(SafeSphereScreen.CAMERA_SCANNER) }
             )
             CircularFeatureIcon(
-                icon = "🎤",
-                title = "Voice AI",
-                subtitle = "Assistant",
+                icon = "💬",
+                title = "P2P Chat",
+                subtitle = "Offline mesh",
                 color = Color(0xFF00BCD4),
-                onClick = { viewModel.navigateToScreen(SafeSphereScreen.VOICE_ASSISTANT) }
+                onClick = { viewModel.navigateToScreen(SafeSphereScreen.P2P_CHAT) }
             )
         }
 

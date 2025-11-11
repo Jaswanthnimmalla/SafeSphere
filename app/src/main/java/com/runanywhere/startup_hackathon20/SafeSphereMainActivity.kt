@@ -535,6 +535,11 @@ fun MainAppContent(
                                         onNavigateBack = { viewModel.navigateBack() }
                                     )
 
+                                    SafeSphereScreen.P2P_CHAT -> P2PChatScreen(
+                                        viewModel = viewModel,
+                                        onNavigateBack = { viewModel.navigateBack() }
+                                    )
+
                                     else -> {}
                                 }
                             }
@@ -1074,6 +1079,7 @@ fun getScreenTitle(screen: SafeSphereScreen): String {
         SafeSphereScreen.BLOGS -> "Blog"
         SafeSphereScreen.CONTACT_US -> "Contact"
         SafeSphereScreen.CAMERA_SCANNER -> "Image Scanner"
+        SafeSphereScreen.P2P_CHAT -> "P2P Chat"
         else -> "SafeSphere"
     }
 }
