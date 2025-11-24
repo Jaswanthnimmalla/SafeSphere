@@ -827,10 +827,12 @@ private fun FeaturesGrid(viewModel: SafeSphereViewModel, analytics: DashboardAna
             )
             CircularFeatureIcon(
                 icon = "💬",
-                title = "P2P Chat",
-                subtitle = "Offline mesh",
+                title = "Offline Messenger",
+                subtitle = "Chat locally",
                 color = Color(0xFF00BCD4),
-                onClick = { viewModel.navigateToScreen(SafeSphereScreen.P2P_CHAT) }
+                onClick = {
+                    viewModel.navigateToScreen(SafeSphereScreen.OFFLINE_MESSENGER)
+                }
             )
         }
 

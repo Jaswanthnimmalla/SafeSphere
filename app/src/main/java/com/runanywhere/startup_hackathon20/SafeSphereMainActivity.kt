@@ -602,12 +602,8 @@ fun MainAppContent(
                                         viewModel = viewModel,
                                         onNavigateBack = { viewModel.navigateBack() }
                                     )
-                                    SafeSphereScreen.SCREENSHOT_GUARDIAN -> ScreenshotGuardianScreen(
-                                        viewModel = viewModel,
-                                        onNavigateBack = { viewModel.navigateBack() }
-                                    )
 
-                                    SafeSphereScreen.P2P_CHAT -> P2PChatScreen(
+                                    SafeSphereScreen.OFFLINE_MESSENGER -> OfflineMessengerScreen(
                                         viewModel = viewModel,
                                         onNavigateBack = { viewModel.navigateBack() }
                                     )
@@ -1151,7 +1147,7 @@ fun getScreenTitle(screen: SafeSphereScreen): String {
         SafeSphereScreen.BLOGS -> "Blog"
         SafeSphereScreen.CONTACT_US -> "Contact"
         SafeSphereScreen.CAMERA_SCANNER -> "Image Scanner"
-        SafeSphereScreen.P2P_CHAT -> "P2P Chat"
+        SafeSphereScreen.OFFLINE_MESSENGER -> "Offline Messenger"
         else -> "SafeSphere"
     }
 }

@@ -887,7 +887,7 @@ enum class SafeSphereScreen {
     CONTACT_US,
     SCREENSHOT_GUARDIAN,
     CAMERA_SCANNER,  // New camera document scanner
-    P2P_CHAT  // New peer-to-peer offline chat
+    OFFLINE_MESSENGER  // New offline messenger with local contacts
 }
 
 /**

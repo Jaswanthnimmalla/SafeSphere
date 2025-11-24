@@ -31,29 +31,27 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
-import com.runanywhere.startup_hackathon20.data.P2PMessageRepository
+import com.runanywhere.startup_hackathon20.data.Message
+import com.runanywhere.startup_hackathon20.data.OfflineMessengerRepository
 import com.runanywhere.startup_hackathon20.viewmodels.SafeSphereViewModel
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.*
-import kotlin.collections.filter
-import kotlin.collections.find
-import kotlin.collections.isNotEmpty
 
 /**
- * 💬 P2P Offline Chat Screen
+ * 💬 Offline Messenger - Simple Local Chat
  *
  * Features:
- * - Offline peer-to-peer messaging (WiFi Direct + Bluetooth)
- * - Auto-detects contacts from phone
- * - Discovers nearby SafeSphere users
- * - Search engine for contacts
- * - Real message persistence
- * - No internet required!
+ * - Chat with your contacts offline
+ * - Messages stored locally on your device
+ * - No internet required
+ * - End-to-end encrypted storage
+ * - WhatsApp-style UI
  */
 @Composable
-fun P2PChatScreen(
+fun OfflineMessengerScreen(
     viewModel: SafeSphereViewModel,
     onNavigateBack: () -> Unit
 ) {
@@ -61,18 +59,41 @@ fun P2PChatScreen(
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
 
-    // Get message repository
-    val messageRepository = remember { P2PMessageRepository.getInstance(context) }
-    val conversations by messageRepository.conversations.collectAsState()
-    val unreadCounts by messageRepository.unreadCounts.collectAsState()
-
-    // Current user phone (in real app, get from user profile)
-    val currentUserPhone = remember {
-        context.getSharedPreferences("safesphere_prefs", Context.MODE_PRIVATE)
-            .getString("user_phone", "+1234567890") ?: "+1234567890"
+    // Use repository with safe initialization
+    val repository = remember {
+        try {
+            OfflineMessengerRepository.getInstance(context)
+        } catch (e: Exception) {
+            android.util.Log.e("OfflineMessenger", "Failed to init repository: ${e.message}", e)
+            null
+        }
     }
 
-    // States
+    val conversations by remember(repository) {
+        repository?.conversations ?: MutableStateFlow(emptyMap())
+    }.collectAsState()
+
+    // Advanced features state
+    val nearbyDevices by remember(repository) {
+        repository?.nearbyDevices ?: MutableStateFlow(emptyList())
+    }.collectAsState()
+
+    var pinnedChats by remember { mutableStateOf(setOf<String>()) }
+    var archivedChats by remember { mutableStateOf(setOf<String>()) }
+    var blockedContacts by remember { mutableStateOf(setOf<String>()) }
+    var typingUsers by remember { mutableStateOf(mapOf<String, Boolean>()) }
+    var onlineUsers by remember { mutableStateOf(setOf<String>()) }
+    var showNearbyDevices by remember { mutableStateOf(false) }
+    var showArchivedChats by remember { mutableStateOf(false) }
+
+    // Simple state management
+    var contacts by remember { mutableStateOf<List<Contact>>(emptyList()) }
+    var selectedContact by remember { mutableStateOf<Contact?>(null) }
+    var showChatDialog by remember { mutableStateOf(false) }
+    var searchQuery by remember { mutableStateOf("") }
+    var bluetoothStatus by remember { mutableStateOf("⚪ Bluetooth Disabled") }
+
+    // Permission state
     var hasContactsPermission by remember {
         mutableStateOf(
             ContextCompat.checkSelfPermission(
@@ -82,39 +103,97 @@ fun P2PChatScreen(
         )
     }
 
-    var searchQuery by remember { mutableStateOf("") }
-    var contacts by remember { mutableStateOf<List<ContactInfo>>(emptyList()) }
-    var nearbyUsers by remember { mutableStateOf<List<NearbyUser>>(emptyList()) }
-    var selectedContact by remember { mutableStateOf<ContactInfo?>(null) }
-    var isDiscovering by remember { mutableStateOf(false) }
-    var showChatDialog by remember { mutableStateOf(false) }
+    var hasBluetoothPermission by remember {
+        mutableStateOf(false)
+    }
 
-    // Permission launcher
-    val permissionLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.RequestPermission()
-    ) { isGranted ->
-        hasContactsPermission = isGranted
-        if (isGranted) {
-            scope.launch {
-                contacts = loadContacts(context)
+    // Start Bluetooth server when permissions granted (only if repository available)
+    LaunchedEffect(hasBluetoothPermission, repository) {
+        if (repository != null && hasBluetoothPermission) {
+            try {
+                if (repository.isBluetoothAvailable()) {
+                    repository.startBluetoothServer()
+                    bluetoothStatus = "🟢 Bluetooth Active"
+                } else {
+                    bluetoothStatus = "⚪ Bluetooth Disabled"
+                }
+            } catch (e: Exception) {
+                android.util.Log.e("OfflineMessenger", "Bluetooth error: ${e.message}")
+                bluetoothStatus = "⚪ Bluetooth Disabled"
             }
         }
     }
 
-    // Load contacts on permission grant
-    LaunchedEffect(hasContactsPermission) {
-        if (hasContactsPermission) {
-            contacts = loadContacts(context)
-            // Simulate discovering nearby users
-            isDiscovering = true
-            delay(2000)
-            nearbyUsers = simulateNearbyUsers()
-            isDiscovering = false
+    // Setup message received callback
+    LaunchedEffect(repository) {
+        repository?.onMessageReceived = { phone, message ->
+            android.util.Log.d("OfflineMessenger", "Message received from $phone: $message")
         }
     }
 
-    // Filter contacts based on search
-    val filteredContacts = remember(contacts, searchQuery, nearbyUsers) {
+    // Load contacts from phone
+    LaunchedEffect(hasContactsPermission) {
+        if (hasContactsPermission) {
+            try {
+                contacts = loadContactsFromPhone(context)
+            } catch (e: Exception) {
+                android.util.Log.e("OfflineMessenger", "Failed to load contacts: ${e.message}", e)
+                contacts = emptyList()
+            }
+        }
+    }
+
+    // Permission launchers
+    val contactsPermissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { isGranted ->
+        hasContactsPermission = isGranted
+    }
+
+    val bluetoothPermissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestMultiplePermissions()
+    ) { permissions ->
+        hasBluetoothPermission = permissions.values.all { it }
+    }
+
+    // Request Bluetooth permissions on start (but don't crash if fails)
+    LaunchedEffect(Unit) {
+        try {
+            if (!hasBluetoothPermission) {
+                val permissions =
+                    if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S) {
+                        arrayOf(
+                            Manifest.permission.BLUETOOTH_SCAN,
+                            Manifest.permission.BLUETOOTH_CONNECT,
+                            Manifest.permission.BLUETOOTH_ADVERTISE
+                        )
+                    } else {
+                        arrayOf(
+                            Manifest.permission.BLUETOOTH,
+                            Manifest.permission.BLUETOOTH_ADMIN,
+                            Manifest.permission.ACCESS_FINE_LOCATION
+                        )
+                    }
+                bluetoothPermissionLauncher.launch(permissions)
+            }
+        } catch (e: Exception) {
+            android.util.Log.e(
+                "OfflineMessenger",
+                "Failed to request Bluetooth permissions: ${e.message}",
+                e
+            )
+        }
+    }
+
+    // Cleanup on dispose
+    DisposableEffect(Unit) {
+        onDispose {
+            // Don't cleanup repository as it's singleton
+        }
+    }
+
+    // Filter contacts
+    val filteredContacts = remember(contacts, searchQuery) {
         if (searchQuery.isEmpty()) {
             contacts
         } else {
@@ -144,7 +223,7 @@ fun P2PChatScreen(
         ) {
             item { Spacer(modifier = Modifier.height(8.dp)) }
 
-            // Hero Header
+            // Header
             item {
                 GlassCard(modifier = Modifier.fillMaxWidth()) {
                     Box(
@@ -184,7 +263,7 @@ fun P2PChatScreen(
                             Spacer(modifier = Modifier.height(20.dp))
 
                             Text(
-                                text = "P2P Offline Chat",
+                                text = "Offline Messenger",
                                 fontSize = 26.sp,
                                 fontWeight = FontWeight.Bold,
                                 color = colors.textPrimary,
@@ -194,7 +273,7 @@ fun P2PChatScreen(
                             Spacer(modifier = Modifier.height(10.dp))
 
                             Text(
-                                text = "Message nearby users without internet",
+                                text = "Chat with contacts • No internet needed",
                                 fontSize = 15.sp,
                                 color = colors.textSecondary,
                                 textAlign = TextAlign.Center
@@ -206,16 +285,35 @@ fun P2PChatScreen(
                                 verticalAlignment = Alignment.CenterVertically,
                                 horizontalArrangement = Arrangement.Center
                             ) {
+                                // Bluetooth status indicator
+                                Icon(
+                                    imageVector = Icons.Default.Star, // Represents Bluetooth
+                                    contentDescription = "Bluetooth",
+                                    tint = if (bluetoothStatus.contains("Active")) Color(0xFF4CAF50) else Color.Gray,
+                                    modifier = Modifier.size(12.dp)
+                                )
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text(
+                                    text = bluetoothStatus,
+                                    fontSize = 12.sp,
+                                    color = colors.textSecondary,
+                                    fontWeight = FontWeight.Medium
+                                )
+                                Spacer(modifier = Modifier.width(16.dp))
                                 Box(
                                     modifier = Modifier
                                         .size(10.dp)
                                         .clip(CircleShape)
-                                        .background(Color(0xFF00BCD4))
+                                        .background(
+                                            if (bluetoothStatus.contains("Active")) Color(
+                                                0xFF4CAF50
+                                            ) else Color.Gray
+                                        )
                                 )
-                                Spacer(modifier = Modifier.width(10.dp))
+                                Spacer(modifier = Modifier.width(6.dp))
                                 Text(
-                                    text = "WiFi Direct • Bluetooth • 100% Offline",
-                                    fontSize = 13.sp,
+                                    text = "Encrypted Storage",
+                                    fontSize = 12.sp,
                                     color = colors.textSecondary,
                                     fontWeight = FontWeight.Medium
                                 )
@@ -225,7 +323,7 @@ fun P2PChatScreen(
                 }
             }
 
-            // Stats Row
+            // Stats
             item {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -239,69 +337,175 @@ fun P2PChatScreen(
                         modifier = Modifier.weight(1f)
                     )
                     StatCard(
-                        icon = "👥",
-                        value = "${nearbyUsers.size}",
-                        label = "Nearby",
+                        icon = "💬",
+                        value = "${conversations.size}",
+                        label = "Chats",
                         color = Color(0xFF4CAF50),
                         modifier = Modifier.weight(1f)
                     )
                     StatCard(
-                        icon = "💬",
-                        value = "${conversations.size}",
-                        label = "Chats",
+                        icon = "📝",
+                        value = "${conversations.values.sumOf { it.size }}",
+                        label = "Messages",
                         color = Color(0xFFFF9800),
                         modifier = Modifier.weight(1f)
                     )
                 }
             }
 
-            // Search Bar
-            item {
-                SearchBar(
-                    query = searchQuery,
-                    onQueryChange = { searchQuery = it },
-                    placeholder = "Search by name or number...",
-                    colors = colors
-                )
+            // Nearby Devices Section
+            if (hasBluetoothPermission && bluetoothStatus.contains("Active")) {
+                item {
+                    GlassCard(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { showNearbyDevices = !showNearbyDevices }
+                    ) {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .background(
+                                    Brush.horizontalGradient(
+                                        colors = listOf(
+                                            Color(0xFF4CAF50).copy(alpha = 0.1f),
+                                            Color(0xFF00BCD4).copy(alpha = 0.1f)
+                                        )
+                                    )
+                                )
+                                .padding(16.dp)
+                        ) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Box(
+                                        modifier = Modifier
+                                            .size(40.dp)
+                                            .clip(CircleShape)
+                                            .background(Color(0xFF4CAF50).copy(alpha = 0.2f)),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Text(text = "📡", fontSize = 20.sp)
+                                    }
+                                    Spacer(modifier = Modifier.width(12.dp))
+                                    Column {
+                                        Text(
+                                            text = "Nearby Devices",
+                                            fontSize = 16.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            color = colors.textPrimary
+                                        )
+                                        Text(
+                                            text = "${repository?.getPairedDevices()?.size ?: 0} devices found",
+                                            fontSize = 12.sp,
+                                            color = colors.textSecondary
+                                        )
+                                    }
+                                }
+                                Icon(
+                                    imageVector = if (showNearbyDevices) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
+                                    contentDescription = "Toggle",
+                                    tint = colors.textSecondary
+                                )
+                            }
+
+                            // Device list
+                            if (showNearbyDevices) {
+                                Spacer(modifier = Modifier.height(12.dp))
+                                repository?.getPairedDevices()?.forEach { device ->
+                                    Row(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(vertical = 8.dp),
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Row(verticalAlignment = Alignment.CenterVertically) {
+                                            Box(
+                                                modifier = Modifier
+                                                    .size(8.dp)
+                                                    .clip(CircleShape)
+                                                    .background(Color(0xFF4CAF50))
+                                            )
+                                            Spacer(modifier = Modifier.width(8.dp))
+                                            Column {
+                                                Text(
+                                                    text = device.name ?: "Unknown Device",
+                                                    fontSize = 14.sp,
+                                                    color = colors.textPrimary,
+                                                    fontWeight = FontWeight.Medium
+                                                )
+                                                Text(
+                                                    text = device.address,
+                                                    fontSize = 11.sp,
+                                                    color = colors.textSecondary
+                                                )
+                                            }
+                                        }
+                                        Text(
+                                            text = "Connected",
+                                            fontSize = 11.sp,
+                                            color = Color(0xFF4CAF50),
+                                            fontWeight = FontWeight.Bold
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
             }
 
-            // Nearby Users Section
-            if (nearbyUsers.isNotEmpty()) {
+            // Search Bar
+            if (hasContactsPermission) {
+                item {
+                    SearchBar(
+                        query = searchQuery,
+                        onQueryChange = { searchQuery = it },
+                        colors = colors
+                    )
+                }
+            }
+
+            // Recent Conversations
+            if (conversations.isNotEmpty()) {
                 item {
                     Text(
-                        text = "📡 Nearby SafeSphere Users (${nearbyUsers.size})",
+                        text = "💬 Recent Chats (${conversations.size})",
                         fontSize = 18.sp,
                         fontWeight = FontWeight.Bold,
                         color = colors.textPrimary
                     )
                 }
 
-                items(nearbyUsers) { user ->
-                    val unreadCount = unreadCounts[user.phone] ?: 0
-                    NearbyUserCard(
-                        user = user,
-                        unreadCount = unreadCount,
+                items(conversations.entries.toList()) { (phone, messages) ->
+                    val contact = contacts.find { it.phone == phone }
+                        ?: Contact("Unknown", phone, phone)
+                    val lastMessage = messages.lastOrNull()
+
+                    ConversationCard(
+                        contact = contact,
+                        lastMessage = lastMessage,
+                        unreadCount = messages.count { !it.isRead && !it.isSent },
                         onClick = {
-                            // Find contact or create temp
-                            val contact = contacts.find { it.phone == user.phone }
-                                ?: ContactInfo(
-                                    id = user.id,
-                                    name = user.name,
-                                    phone = user.phone
-                                )
                             selectedContact = contact
                             showChatDialog = true
                         },
-                        colors = colors
+                        colors = colors,
+                        isTyping = typingUsers[phone] ?: false,
+                        isOnline = onlineUsers.contains(phone),
+                        isPinned = pinnedChats.contains(phone)
                     )
                 }
             }
 
-            // Contacts Section
+            // Contacts List
             if (hasContactsPermission) {
                 item {
                     Text(
-                        text = "📇 Your Contacts (${filteredContacts.size})",
+                        text = "📇 All Contacts (${filteredContacts.size})",
                         fontSize = 18.sp,
                         fontWeight = FontWeight.Bold,
                         color = colors.textPrimary
@@ -309,11 +513,10 @@ fun P2PChatScreen(
                 }
 
                 items(filteredContacts) { contact ->
-                    val unreadCount = unreadCounts[contact.phone] ?: 0
+                    val hasConversation = conversations.containsKey(contact.phone)
                     ContactCard(
                         contact = contact,
-                        isOnline = nearbyUsers.any { it.phone == contact.phone },
-                        unreadCount = unreadCount,
+                        hasConversation = hasConversation,
                         onClick = {
                             selectedContact = contact
                             showChatDialog = true
@@ -322,7 +525,7 @@ fun P2PChatScreen(
                     )
                 }
             } else {
-                // Permission request
+                // Permission Request
                 item {
                     GlassCard(modifier = Modifier.fillMaxWidth()) {
                         Column(
@@ -341,7 +544,7 @@ fun P2PChatScreen(
                             )
                             Spacer(modifier = Modifier.height(8.dp))
                             Text(
-                                text = "We need permission to find SafeSphere users in your contacts",
+                                text = "Grant contacts permission to start messaging your friends offline",
                                 fontSize = 14.sp,
                                 color = colors.textSecondary,
                                 textAlign = TextAlign.Center
@@ -349,7 +552,7 @@ fun P2PChatScreen(
                             Spacer(modifier = Modifier.height(24.dp))
                             Button(
                                 onClick = {
-                                    permissionLauncher.launch(Manifest.permission.READ_CONTACTS)
+                                    contactsPermissionLauncher.launch(Manifest.permission.READ_CONTACTS)
                                 },
                                 modifier = Modifier.fillMaxWidth(),
                                 colors = ButtonDefaults.buttonColors(
@@ -374,25 +577,27 @@ fun P2PChatScreen(
     if (showChatDialog && selectedContact != null) {
         ChatDialog(
             contact = selectedContact!!,
-            isOnline = nearbyUsers.any { it.phone == selectedContact!!.phone },
-            currentUserPhone = currentUserPhone,
-            messageRepository = messageRepository,
+            messages = conversations[selectedContact!!.phone] ?: emptyList(),
+            onSendMessage = { messageText ->
+                scope.launch {
+                    repository?.sendMessage(selectedContact!!.phone, messageText)
+                }
+            },
             onDismiss = {
                 showChatDialog = false
+                repository?.markAsRead(selectedContact!!.phone)
             },
             colors = colors
         )
     }
 }
 
-/**
- * Search Bar Component
- */
+// ==================== COMPOSABLE COMPONENTS ====================
+
 @Composable
-fun SearchBar(
+private fun SearchBar(
     query: String,
     onQueryChange: (String) -> Unit,
-    placeholder: String,
     colors: ThemeColors
 ) {
     Box(
@@ -427,7 +632,7 @@ fun SearchBar(
                     Box(modifier = Modifier.weight(1f)) {
                         if (query.isEmpty()) {
                             Text(
-                                text = placeholder,
+                                text = "Search contacts...",
                                 fontSize = 16.sp,
                                 color = colors.textSecondary.copy(alpha = 0.5f)
                             )
@@ -451,9 +656,6 @@ fun SearchBar(
     }
 }
 
-/**
- * Stat Card Component
- */
 @Composable
 private fun StatCard(
     icon: String,
@@ -495,15 +697,16 @@ private fun StatCard(
     }
 }
 
-/**
- * Nearby User Card
- */
 @Composable
-fun NearbyUserCard(
-    user: NearbyUser,
+private fun ConversationCard(
+    contact: Contact,
+    lastMessage: Message?,
     unreadCount: Int,
     onClick: () -> Unit,
-    colors: ThemeColors
+    colors: ThemeColors,
+    isTyping: Boolean = false,
+    isOnline: Boolean = false,
+    isPinned: Boolean = false
 ) {
     GlassCard(
         modifier = Modifier
@@ -513,96 +716,95 @@ fun NearbyUserCard(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
+                .background(
+                    if (isPinned) Color(0xFFFF9800).copy(alpha = 0.05f) else Color.Transparent
+                )
                 .padding(16.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Box(
-                modifier = Modifier
-                    .size(56.dp)
-                    .clip(CircleShape)
-                    .background(
-                        Brush.linearGradient(
-                            colors = listOf(
-                                Color(0xFF4CAF50).copy(alpha = 0.3f),
-                                Color(0xFF4CAF50).copy(alpha = 0.1f)
+            Box {
+                Box(
+                    modifier = Modifier
+                        .size(56.dp)
+                        .clip(CircleShape)
+                        .background(
+                            Brush.linearGradient(
+                                colors = listOf(
+                                    Color(0xFF00BCD4).copy(alpha = 0.3f),
+                                    Color(0xFF00BCD4).copy(alpha = 0.1f)
+                                )
                             )
-                        )
+                        ),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = contact.name.take(1).uppercase(),
+                        fontSize = 24.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color(0xFF00BCD4)
                     )
-                    .border(
-                        2.dp,
-                        Color(0xFF4CAF50).copy(alpha = 0.5f),
-                        CircleShape
-                    ),
-                contentAlignment = Alignment.Center
-            ) {
-                Text(
-                    text = user.name.take(1).uppercase(),
-                    fontSize = 24.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = Color(0xFF4CAF50)
-                )
+                }
+
+                // Online indicator
+                if (isOnline) {
+                    Box(
+                        modifier = Modifier
+                            .size(14.dp)
+                            .clip(CircleShape)
+                            .background(Color(0xFF4CAF50))
+                            .border(2.dp, colors.surface, CircleShape)
+                            .align(Alignment.BottomEnd)
+                    )
+                }
             }
 
             Spacer(modifier = Modifier.width(16.dp))
 
             Column(modifier = Modifier.weight(1f)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
+                    if (isPinned) {
+                        Icon(
+                            imageVector = Icons.Default.Star,
+                            contentDescription = "Pinned",
+                            tint = Color(0xFFFF9800),
+                            modifier = Modifier.size(14.dp)
+                        )
+                        Spacer(modifier = Modifier.width(4.dp))
+                    }
                     Text(
-                        text = user.name,
+                        text = contact.name,
                         fontSize = 16.sp,
                         fontWeight = FontWeight.Bold,
                         color = colors.textPrimary
                     )
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Box(
-                        modifier = Modifier
-                            .size(8.dp)
-                            .clip(CircleShape)
-                            .background(Color(0xFF4CAF50))
-                    )
                 }
                 Spacer(modifier = Modifier.height(4.dp))
                 Text(
-                    text = user.phone,
+                    text = when {
+                        isTyping -> "✍️ typing..."
+                        lastMessage != null -> lastMessage.content.take(30)
+                        else -> "No messages yet"
+                    },
                     fontSize = 13.sp,
-                    color = colors.textSecondary
+                    color = if (isTyping) Color(0xFF00BCD4) else colors.textSecondary,
+                    maxLines = 1,
+                    fontStyle = if (isTyping) androidx.compose.ui.text.font.FontStyle.Italic else androidx.compose.ui.text.font.FontStyle.Normal
                 )
-                Spacer(modifier = Modifier.height(4.dp))
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(
-                        imageVector = Icons.Default.Info,
-                        contentDescription = null,
-                        tint = Color(0xFF4CAF50),
-                        modifier = Modifier.size(14.dp)
-                    )
-                    Spacer(modifier = Modifier.width(4.dp))
-                    Text(
-                        text = "${user.distance}m away • ${user.connectionType}",
-                        fontSize = 11.sp,
-                        color = Color(0xFF4CAF50),
-                        fontWeight = FontWeight.Medium
-                    )
-                }
             }
 
-            Icon(
-                imageVector = Icons.Default.Send,
-                contentDescription = "Chat",
-                tint = Color(0xFF4CAF50),
-                modifier = Modifier.size(24.dp)
-            )
             if (unreadCount > 0) {
                 Box(
                     modifier = Modifier
-                        .size(16.dp)
+                        .size(24.dp)
                         .clip(CircleShape)
                         .background(Color(0xFF4CAF50)),
                     contentAlignment = Alignment.Center
                 ) {
                     Text(
                         text = unreadCount.toString(),
-                        fontSize = 10.sp,
-                        color = Color.White
+                        fontSize = 12.sp,
+                        color = Color.White,
+                        fontWeight = FontWeight.Bold
                     )
                 }
             }
@@ -610,14 +812,10 @@ fun NearbyUserCard(
     }
 }
 
-/**
- * Contact Card
- */
 @Composable
-fun ContactCard(
-    contact: ContactInfo,
-    isOnline: Boolean,
-    unreadCount: Int,
+private fun ContactCard(
+    contact: Contact,
+    hasConversation: Boolean,
     onClick: () -> Unit,
     colors: ThemeColors
 ) {
@@ -643,11 +841,6 @@ fun ContactCard(
                                 Color(0xFF2196F3).copy(alpha = 0.1f)
                             )
                         )
-                    )
-                    .border(
-                        2.dp,
-                        if (isOnline) Color(0xFF4CAF50) else Color(0xFF2196F3).copy(alpha = 0.5f),
-                        CircleShape
                     ),
                 contentAlignment = Alignment.Center
             ) {
@@ -676,66 +869,25 @@ fun ContactCard(
                 )
             }
 
-            if (isOnline) {
-                Box(
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(8.dp))
-                        .background(Color(0xFF4CAF50).copy(alpha = 0.15f))
-                        .padding(horizontal = 8.dp, vertical = 4.dp)
-                ) {
-                    Text(
-                        text = "🟢 Online",
-                        fontSize = 11.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = Color(0xFF4CAF50)
-                    )
-                }
-            }
-            if (unreadCount > 0) {
-                Box(
-                    modifier = Modifier
-                        .size(16.dp)
-                        .clip(CircleShape)
-                        .background(Color(0xFF4CAF50)),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text(
-                        text = unreadCount.toString(),
-                        fontSize = 10.sp,
-                        color = Color.White
-                    )
-                }
-            }
+            Icon(
+                imageVector = if (hasConversation) Icons.Default.Send else Icons.Default.Add,
+                contentDescription = "Chat",
+                tint = if (hasConversation) Color(0xFF00BCD4) else colors.textSecondary,
+                modifier = Modifier.size(24.dp)
+            )
         }
     }
 }
 
-/**
- * Chat Dialog
- */
 @Composable
-fun ChatDialog(
-    contact: ContactInfo,
-    isOnline: Boolean,
-    currentUserPhone: String,
-    messageRepository: P2PMessageRepository,
+private fun ChatDialog(
+    contact: Contact,
+    messages: List<Message>,
+    onSendMessage: (String) -> Unit,
     onDismiss: () -> Unit,
     colors: ThemeColors
 ) {
-    val scope = rememberCoroutineScope()
-    
-    // Get messages from repository
-    val allConversations by messageRepository.conversations.collectAsState()
-    val messages = remember(allConversations) {
-        allConversations[contact.phone] ?: emptyList()
-    }
-    
-    var message by remember { mutableStateOf("") }
-
-    // Mark as read when opening
-    LaunchedEffect(contact.phone) {
-        messageRepository.markAsRead(contact.phone)
-    }
+    var messageText by remember { mutableStateOf("") }
 
     androidx.compose.ui.window.Dialog(
         onDismissRequest = onDismiss,
@@ -793,9 +945,9 @@ fun ChatDialog(
                                 color = colors.textPrimary
                             )
                             Text(
-                                text = if (isOnline) "🟢 Online - P2P Active" else "⚪ Offline - Mesh Delivery",
+                                text = "📱 ${contact.phone}",
                                 fontSize = 12.sp,
-                                color = if (isOnline) Color(0xFF4CAF50) else Color(0xFFFF9800)
+                                color = colors.textSecondary
                             )
                         }
 
@@ -817,12 +969,11 @@ fun ChatDialog(
                         .padding(16.dp),
                     reverseLayout = true
                 ) {
-                    items(messages.asReversed()) { msg ->
-                        MessageBubble(msg, colors, msg.fromPhone == currentUserPhone)
+                    items(messages.asReversed()) { message ->
+                        MessageBubble(message, colors)
                         Spacer(modifier = Modifier.height(8.dp))
                     }
 
-                    // Empty state
                     if (messages.isEmpty()) {
                         item {
                             Column(
@@ -839,7 +990,7 @@ fun ChatDialog(
                                     color = colors.textSecondary
                                 )
                                 Text(
-                                    text = "Start chatting offline via mesh network!",
+                                    text = "Start chatting offline!",
                                     fontSize = 13.sp,
                                     color = Color(0xFF00BCD4),
                                     fontWeight = FontWeight.Medium
@@ -865,25 +1016,24 @@ fun ChatDialog(
                             .padding(horizontal = 16.dp, vertical = 12.dp)
                     ) {
                         BasicTextField(
-                            value = message,
-                            onValueChange = { message = it },
+                            value = messageText,
+                            onValueChange = { messageText = it },
                             textStyle = TextStyle(
                                 color = colors.textPrimary,
                                 fontSize = 15.sp
                             ),
                             cursorBrush = SolidColor(Color(0xFF00BCD4)),
                             decorationBox = { innerTextField ->
-                                if (message.isEmpty()) {
+                                if (messageText.isEmpty()) {
                                     Text(
-                                        text = "Type a message (offline delivery)...",
+                                        text = "Type a message...",
                                         fontSize = 15.sp,
                                         color = colors.textSecondary.copy(alpha = 0.5f)
                                     )
                                 }
                                 innerTextField()
                             },
-                            modifier = Modifier.fillMaxWidth(),
-                            enabled = true // Always enabled for offline messaging
+                            modifier = Modifier.fillMaxWidth()
                         )
                     }
 
@@ -891,15 +1041,14 @@ fun ChatDialog(
 
                     FloatingActionButton(
                         onClick = {
-                            if (message.isNotBlank()) {
-                                // Send message using repository
-                                messageRepository.sendMessage(contact.phone, message)
-                                message = ""
+                            if (messageText.isNotBlank()) {
+                                onSendMessage(messageText)
+                                messageText = ""
                             }
                         },
                         modifier = Modifier.size(48.dp),
-                        containerColor = if (message.isNotBlank()) Color(0xFF00BCD4) else colors.surfaceVariant,
-                        contentColor = if (message.isNotBlank()) Color.White else colors.textSecondary
+                        containerColor = if (messageText.isNotBlank()) Color(0xFF00BCD4) else colors.surfaceVariant,
+                        contentColor = if (messageText.isNotBlank()) Color.White else colors.textSecondary
                     ) {
                         Icon(
                             imageVector = Icons.Default.Send,
@@ -912,18 +1061,14 @@ fun ChatDialog(
     }
 }
 
-/**
- * Message Bubble
- */
 @Composable
-fun MessageBubble(
-    message: com.runanywhere.startup_hackathon20.data.P2PMessage,
-    colors: ThemeColors,
-    isSent: Boolean
+private fun MessageBubble(
+    message: Message,
+    colors: ThemeColors
 ) {
     Row(
         modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = if (isSent) Arrangement.End else Arrangement.Start
+        horizontalArrangement = if (message.isSent) Arrangement.End else Arrangement.Start
     ) {
         Box(
             modifier = Modifier
@@ -932,12 +1077,12 @@ fun MessageBubble(
                     RoundedCornerShape(
                         topStart = 16.dp,
                         topEnd = 16.dp,
-                        bottomStart = if (isSent) 16.dp else 4.dp,
-                        bottomEnd = if (isSent) 4.dp else 16.dp
+                        bottomStart = if (message.isSent) 16.dp else 4.dp,
+                        bottomEnd = if (message.isSent) 4.dp else 16.dp
                     )
                 )
                 .background(
-                    if (isSent)
+                    if (message.isSent)
                         Color(0xFF00BCD4)
                     else
                         colors.surfaceVariant
@@ -948,28 +1093,56 @@ fun MessageBubble(
                 Text(
                     text = message.content,
                     fontSize = 14.sp,
-                    color = if (isSent) Color.White else colors.textPrimary,
+                    color = if (message.isSent) Color.White else colors.textPrimary,
                     lineHeight = 18.sp
                 )
                 Spacer(modifier = Modifier.height(4.dp))
-                Text(
-                    text = SimpleDateFormat(
-                        "HH:mm",
-                        Locale.getDefault()
-                    ).format(Date(message.timestamp)),
-                    fontSize = 10.sp,
-                    color = if (isSent) Color.White.copy(alpha = 0.7f) else colors.textSecondary
-                )
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.End,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text(
+                        text = SimpleDateFormat(
+                            "HH:mm",
+                            Locale.getDefault()
+                        ).format(Date(message.timestamp)),
+                        fontSize = 10.sp,
+                        color = if (message.isSent) Color.White.copy(alpha = 0.7f) else colors.textSecondary
+                    )
+
+                    if (message.isSent) {
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text(
+                            text = when {
+                                message.isRead -> "✓✓"
+                                message.isDelivered -> "✓✓"
+                                else -> "✓"
+                            },
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = if (message.isRead) Color(0xFF53BDEB)
+                            else Color.White.copy(alpha = 0.7f)
+                        )
+                    }
+                }
             }
         }
     }
 }
 
-/**
- * Load contacts from device
- */
-private fun loadContacts(context: Context): List<ContactInfo> {
-    val contacts = mutableListOf<ContactInfo>()
+// ==================== DATA MODELS ====================
+
+data class Contact(
+    val name: String,
+    val phone: String,
+    val id: String
+)
+
+// ==================== HELPER FUNCTIONS ====================
+
+private fun loadContactsFromPhone(context: Context): List<Contact> {
+    val contacts = mutableListOf<Contact>()
 
     try {
         val cursor = context.contentResolver.query(
@@ -996,7 +1169,7 @@ private fun loadContacts(context: Context): List<ContactInfo> {
 
                 if (phone.isNotEmpty()) {
                     contacts.add(
-                        ContactInfo(
+                        Contact(
                             id = id,
                             name = name,
                             phone = phone.replace(Regex("[^0-9+]"), "")
@@ -1011,59 +1184,3 @@ private fun loadContacts(context: Context): List<ContactInfo> {
 
     return contacts.distinctBy { it.phone }
 }
-
-/**
- * Simulate nearby SafeSphere users (in production, use WiFi Direct/Bluetooth discovery)
- */
-private fun simulateNearbyUsers(): List<NearbyUser> {
-    return listOf(
-        NearbyUser(
-            id = "1",
-            name = "Sarah Johnson",
-            phone = "+1234567890",
-            distance = 45,
-            connectionType = "WiFi Direct",
-            isOnline = true
-        ),
-        NearbyUser(
-            id = "2",
-            name = "Mike Chen",
-            phone = "+9876543210",
-            distance = 120,
-            connectionType = "Bluetooth",
-            isOnline = true
-        ),
-        NearbyUser(
-            id = "3",
-            name = "Emma Davis",
-            phone = "+1122334455",
-            distance = 8,
-            connectionType = "WiFi Direct",
-            isOnline = true
-        )
-    )
-}
-
-/**
- * Data Classes
- */
-data class ContactInfo(
-    val id: String,
-    val name: String,
-    val phone: String
-)
-
-data class NearbyUser(
-    val id: String,
-    val name: String,
-    val phone: String,
-    val distance: Int,
-    val connectionType: String,
-    val isOnline: Boolean
-)
-
-data class ChatMessage(
-    val content: String,
-    val sender: String,
-    val timestamp: Long
-)
