@@ -271,7 +271,7 @@ fun BackupRestoreScreen(
                             contentAlignment = Alignment.Center
                         ) {
                             Icon(
-                                Icons.Default.CloudUpload,
+                                Icons.Default.Star,
                                 contentDescription = null,
                                 tint = Color.White,
                                 modifier = Modifier.size(28.dp)
@@ -296,7 +296,7 @@ fun BackupRestoreScreen(
                         }
 
                         Icon(
-                            Icons.Default.ChevronRight,
+                            Icons.Default.KeyboardArrowRight,
                             contentDescription = null,
                             tint = SafeSphereColors.TextSecondary
                         )
@@ -345,7 +345,7 @@ fun BackupRestoreScreen(
                             contentAlignment = Alignment.Center
                         ) {
                             Icon(
-                                Icons.Default.CloudDownload,
+                                Icons.Default.Settings,
                                 contentDescription = null,
                                 tint = Color.White,
                                 modifier = Modifier.size(28.dp)
@@ -370,7 +370,7 @@ fun BackupRestoreScreen(
                         }
 
                         Icon(
-                            Icons.Default.ChevronRight,
+                            Icons.Default.KeyboardArrowRight,
                             contentDescription = null,
                             tint = SafeSphereColors.TextSecondary
                         )
@@ -515,43 +515,43 @@ fun BackupRestoreScreen(
 
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier.clickable { mergeMode = true }
+                        modifier = Modifier.clickable { mergeMode = !mergeMode }
                     ) {
                         RadioButton(
                             selected = mergeMode,
                             onClick = { mergeMode = true }
                         )
                         Text("Merge with existing")
-                        )
-                    }
-                },
-                confirmButton = {
-                    Button(
-                        onClick = {
-                            if (restorePassword.isEmpty()) {
-                                resultMessage = "❌ Please enter backup password"
-                                isError = true
-                                return@Button
-                            }
-                            restoreBackupLauncher.launch(arrayOf("*/*"))
-                        },
-                        enabled = restorePassword.isNotEmpty() && !operationInProgress
-                    ) {
-                        if (operationInProgress) {
-                            CircularProgressIndicator(
-                                modifier = Modifier.size(16.dp),
-                                color = Color.White
-                            )
-                        } else {
-                            Text("Select Backup File")
-                        }
-                    }
-                },
-                dismissButton = {
-                    TextButton(onClick = { showRestoreDialog = false }) {
-                        Text("Cancel")
                     }
                 }
-                )
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        if (restorePassword.isEmpty()) {
+                            resultMessage = "❌ Please enter backup password"
+                            isError = true
+                            return@Button
+                        }
+                        restoreBackupLauncher.launch(arrayOf("*/*"))
+                    },
+                    enabled = restorePassword.isNotEmpty() && !operationInProgress
+                ) {
+                    if (operationInProgress) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(16.dp),
+                            color = Color.White
+                        )
+                    } else {
+                        Text("Select Backup File")
+                    }
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showRestoreDialog = false }) {
+                    Text("Cancel")
+                }
             }
+        )
     }
+}

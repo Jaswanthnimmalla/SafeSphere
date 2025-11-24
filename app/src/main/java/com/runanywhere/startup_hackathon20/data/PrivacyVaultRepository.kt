@@ -301,8 +301,7 @@ class PrivacyVaultRepository private constructor(private val context: Context) {
         category: String,
         size: Long,
         isEncrypted: Boolean,
-        createdAt: Long,
-        updatedAt: Long
+        createdAt: Long
     ): Result<Unit> = withContext(Dispatchers.IO) {
         try {
             val categoryEnum = try {
@@ -316,10 +315,10 @@ class PrivacyVaultRepository private constructor(private val context: Context) {
                 title = title,
                 encryptedContent = encryptedContent,
                 category = categoryEnum,
-                size = size,
+                size = size.toInt(),
                 isEncrypted = isEncrypted,
                 createdAt = createdAt,
-                updatedAt = updatedAt
+                modifiedAt = System.currentTimeMillis()
             )
 
             // Add or update item

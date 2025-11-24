@@ -490,6 +490,14 @@ private fun SettingToggleRow(
 private fun QuickActionsGrid(viewModel: SafeSphereViewModel) {
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
         ActionButton(
+            icon = "💾",
+            title = "Backup & Restore",
+            description = "Export and import encrypted backups",
+            color = Color(0xFF2196F3),
+            onClick = { viewModel.navigateToScreen(SafeSphereScreen.BACKUP_RESTORE) }
+        )
+
+        ActionButton(
             icon = "📊",
             title = "Load Demo Data",
             description = "Test SafeSphere with sample data",

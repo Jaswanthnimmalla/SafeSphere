@@ -557,7 +557,12 @@ fun MainAppContent(
                                 )
                             },
                             bottomBar = {
-                                // Removed bottom bar
+                                BeautifulBottomNavigationBar(
+                                    currentScreen = currentScreen,
+                                    onNavigate = { screen ->
+                                        viewModel.navigateToScreen(screen)
+                                    }
+                                )
                             },
                             containerColor = Color.Transparent
                         ) { paddingValues ->
@@ -604,6 +609,11 @@ fun MainAppContent(
                                     )
 
                                     SafeSphereScreen.OFFLINE_MESSENGER -> OfflineMessengerScreen(
+                                        viewModel = viewModel,
+                                        onNavigateBack = { viewModel.navigateBack() }
+                                    )
+
+                                    SafeSphereScreen.BACKUP_RESTORE -> BackupRestoreScreen(
                                         viewModel = viewModel,
                                         onNavigateBack = { viewModel.navigateBack() }
                                     )
@@ -919,32 +929,48 @@ fun BeautifulTopBar(
 }
 
 /**
- * Beautiful Bottom Navigation Bar with 3 Buttons
+ * Beautiful Bottom Navigation Bar with Home, Blog, and Settings Tabs
+ * ENHANCED VISIBILITY VERSION - Bright background, larger icons, vibrant colors
  */
 @Composable
-fun BeautifulBottomBar(
+fun BeautifulBottomNavigationBar(
     currentScreen: SafeSphereScreen,
-    onMenuClick: () -> Unit,
-    onHomeClick: () -> Unit,
-    onNotificationClick: () -> Unit
+    onNavigate: (SafeSphereScreen) -> Unit
 ) {
+    val tabs = listOf(
+        BottomNavigationTab(
+            screen = SafeSphereScreen.DASHBOARD,
+            label = "Home",
+            icon = Icons.Filled.Home
+        ),
+        BottomNavigationTab(
+            screen = SafeSphereScreen.BLOGS,
+            label = "Blog",
+            icon = Icons.Filled.Info
+        ),
+        BottomNavigationTab(
+            screen = SafeSphereScreen.SETTINGS,
+            label = "Settings",
+            icon = Icons.Filled.Settings
+        )
+    )
+
     Surface(
         modifier = Modifier
             .fillMaxWidth()
-            .height(70.dp),
-        color = SafeSphereColors.Surface.copy(alpha = 0.95f),
-        shadowElevation = 8.dp,
-        shape = RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp)
+            .height(85.dp),
+        color = Color(0xFF1E293B), // Dark blue-gray background for high contrast
+        shadowElevation = 16.dp,
+        shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp)
     ) {
         Box(
             modifier = Modifier
                 .fillMaxSize()
                 .background(
-                    Brush.horizontalGradient(
+                    Brush.verticalGradient(
                         colors = listOf(
-                            SafeSphereColors.Primary.copy(alpha = 0.05f),
-                            SafeSphereColors.Secondary.copy(alpha = 0.05f),
-                            SafeSphereColors.Accent.copy(alpha = 0.05f)
+                            Color(0xFF1E293B),
+                            Color(0xFF0F172A)
                         )
                     )
                 )
@@ -952,40 +978,77 @@ fun BeautifulBottomBar(
             Row(
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(horizontal = 24.dp),
+                    .padding(horizontal = 20.dp, vertical = 12.dp),
                 horizontalArrangement = Arrangement.SpaceEvenly,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                // Left: Unique Menu Button (Hexagon style)
-                BottomNavButton(
-                    icon = Icons.Filled.Menu,
-                    label = "Menu",
-                    isSelected = false,
-                    onClick = onMenuClick,
-                    isUnique = true
-                )
-
-                // Center: Home Button (Large)
-                BottomNavButton(
-                    icon = Icons.Filled.Home,
-                    label = "Home",
-                    isSelected = currentScreen == SafeSphereScreen.DASHBOARD,
-                    onClick = onHomeClick,
-                    isCenter = true
-                )
-
-                // Right: Notification Button
-                BottomNavButton(
-                    icon = Icons.Filled.Notifications,
-                    label = "Alerts",
-                    isSelected = currentScreen == SafeSphereScreen.NOTIFICATIONS,
-                    onClick = onNotificationClick,
-                    showBadge = true
-                )
+                tabs.forEach { tab ->
+                    EnhancedBottomNavButton(
+                        icon = tab.icon,
+                        label = tab.label,
+                        isSelected = currentScreen == tab.screen,
+                        onClick = { onNavigate(tab.screen) }
+                    )
+                }
             }
         }
     }
 }
+
+/**
+ * Enhanced Bottom Navigation Button - Larger icons, vibrant colors, improved contrast
+ */
+@Composable
+fun EnhancedBottomNavButton(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    label: String,
+    isSelected: Boolean,
+    onClick: () -> Unit
+) {
+    val activeColor = Color(0xFF38BDF8) // Vibrant blue accent
+    val inactiveIconColor = Color(0xFFCBD5E1) // Light gray-blue
+    val inactiveTextColor = Color(0xFF94A3B8)
+    val activeBg = activeColor.copy(alpha = 0.18f)
+    val buttonSize = 58.dp
+    val iconSize = 36.dp
+
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        modifier = Modifier.clickable(onClick = onClick)
+    ) {
+        Box(
+            contentAlignment = Alignment.Center,
+            modifier = Modifier
+                .size(buttonSize)
+                .clip(CircleShape)
+                .background(
+                    if (isSelected) activeBg else Color.Transparent
+                )
+        ) {
+            Icon(
+                imageVector = icon,
+                contentDescription = label,
+                tint = if (isSelected) activeColor else inactiveIconColor,
+                modifier = Modifier.size(iconSize)
+            )
+        }
+        Spacer(modifier = Modifier.height(4.dp))
+        Text(
+            text = label,
+            fontSize = if (isSelected) 15.sp else 13.sp,
+            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+            color = if (isSelected) activeColor else inactiveTextColor,
+            maxLines = 1
+        )
+    }
+}
+
+data class BottomNavigationTab(
+    val screen: SafeSphereScreen,
+    val label: String,
+    val icon: androidx.compose.ui.graphics.vector.ImageVector
+)
+
 
 /**
  * Bottom Navigation Button

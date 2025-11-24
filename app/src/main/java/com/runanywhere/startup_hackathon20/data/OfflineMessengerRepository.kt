@@ -250,7 +250,12 @@ class OfflineMessengerRepository private constructor(private val context: Contex
             timestamp = System.currentTimeMillis(),
             isSent = true,
             isDelivered = false,
-            isRead = false
+            isRead = false,
+            messageType = MessageType.TEXT,
+            fileUri = null,
+            fileName = null,
+            fileSize = null,
+            mimeType = null
         )
 
         addMessageToConversation(phone, msg)
@@ -299,6 +304,42 @@ class OfflineMessengerRepository private constructor(private val context: Contex
         }
 
         return@withContext messageSent
+    }
+
+    /**
+     * Send message with file attachment
+     */
+    suspend fun sendMessageWithFile(
+        phone: String,
+        content: String,
+        messageType: MessageType,
+        fileUri: String,
+        fileName: String,
+        fileSize: Long,
+        mimeType: String
+    ): Boolean = withContext(Dispatchers.IO) {
+        // Save locally first
+        val msg = Message(
+            id = UUID.randomUUID().toString(),
+            content = content,
+            timestamp = System.currentTimeMillis(),
+            isSent = true,
+            isDelivered = false,
+            isRead = false,
+            messageType = messageType,
+            fileUri = fileUri,
+            fileName = fileName,
+            fileSize = fileSize,
+            mimeType = mimeType
+        )
+
+        addMessageToConversation(phone, msg)
+
+        // Mark as delivered (file transfer not implemented over Bluetooth yet)
+        delay(1000)
+        markAsDelivered(phone, msg.id)
+
+        return@withContext true
     }
 
     /**
@@ -384,7 +425,12 @@ class OfflineMessengerRepository private constructor(private val context: Contex
                 sb.append("\"timestamp\":${msg.timestamp},")
                 sb.append("\"isSent\":${msg.isSent},")
                 sb.append("\"isDelivered\":${msg.isDelivered},")
-                sb.append("\"isRead\":${msg.isRead}")
+                sb.append("\"isRead\":${msg.isRead},")
+                sb.append("\"messageType\":\"${msg.messageType.name}\",")
+                sb.append("\"fileUri\":\"${msg.fileUri ?: ""}\",")
+                sb.append("\"fileName\":\"${msg.fileName ?: ""}\",")
+                sb.append("\"fileSize\":${msg.fileSize ?: 0},")
+                sb.append("\"mimeType\":\"${msg.mimeType ?: ""}\"")
                 sb.append("}")
             }
 
@@ -428,8 +474,27 @@ class OfflineMessengerRepository private constructor(private val context: Contex
                     val isSent = extractField(msgData, "isSent").toBoolean()
                     val isDelivered = extractField(msgData, "isDelivered").toBoolean()
                     val isRead = extractField(msgData, "isRead").toBoolean()
+                    val messageType = MessageType.valueOf(extractField(msgData, "messageType"))
+                    val fileUri = extractField(msgData, "fileUri")
+                    val fileName = extractField(msgData, "fileName")
+                    val fileSize = extractField(msgData, "fileSize").toLongOrNull()
+                    val mimeType = extractField(msgData, "mimeType")
 
-                    messages.add(Message(id, content, timestamp, isSent, isDelivered, isRead))
+                    messages.add(
+                        Message(
+                            id = id,
+                            content = content,
+                            timestamp = timestamp,
+                            isSent = isSent,
+                            isDelivered = isDelivered,
+                            isRead = isRead,
+                            messageType = messageType,
+                            fileUri = if (fileUri == "") null else fileUri,
+                            fileName = if (fileName == "") null else fileName,
+                            fileSize = fileSize,
+                            mimeType = if (mimeType == "") null else mimeType
+                        )
+                    )
                 }
 
                 conversations[phone] = messages
@@ -547,5 +612,21 @@ data class Message(
     val timestamp: Long,
     val isSent: Boolean,
     val isDelivered: Boolean,
-    val isRead: Boolean
+    val isRead: Boolean,
+    val messageType: MessageType = MessageType.TEXT,
+    val fileUri: String? = null,
+    val fileName: String? = null,
+    val fileSize: Long? = null,
+    val mimeType: String? = null
 )
+
+/**
+ * Message types
+ */
+enum class MessageType {
+    TEXT,
+    IMAGE,
+    DOCUMENT,
+    VOICE,
+    VIDEO
+}

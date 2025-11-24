@@ -2,11 +2,16 @@ package com.runanywhere.startup_hackathon20.ui
 
 import android.Manifest
 import android.content.Context
+import android.content.Intent
 import android.content.pm.PackageManager
+import android.graphics.BitmapFactory
+import android.net.Uri
 import android.provider.ContactsContract
+import android.provider.OpenableColumns
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.*
+import androidx.compose.animation.core.*
 import androidx.compose.foundation.*
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -24,14 +29,19 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
+import coil.compose.AsyncImage
 import com.runanywhere.startup_hackathon20.data.Message
+import com.runanywhere.startup_hackathon20.data.MessageType
 import com.runanywhere.startup_hackathon20.data.OfflineMessengerRepository
 import com.runanywhere.startup_hackathon20.viewmodels.SafeSphereViewModel
 import kotlinx.coroutines.delay
@@ -41,14 +51,14 @@ import java.text.SimpleDateFormat
 import java.util.*
 
 /**
- * 💬 Offline Messenger - Simple Local Chat
+ * Offline Messenger - Enhanced with Media Sharing
  *
  * Features:
  * - Chat with your contacts offline
- * - Messages stored locally on your device
- * - No internet required
+ * - Share images, documents, videos
+ * - WhatsApp-style modern UI
  * - End-to-end encrypted storage
- * - WhatsApp-style UI
+ * - File attachments support
  */
 @Composable
 fun OfflineMessengerScreen(
@@ -578,11 +588,7 @@ fun OfflineMessengerScreen(
         ChatDialog(
             contact = selectedContact!!,
             messages = conversations[selectedContact!!.phone] ?: emptyList(),
-            onSendMessage = { messageText ->
-                scope.launch {
-                    repository?.sendMessage(selectedContact!!.phone, messageText)
-                }
-            },
+            repository = repository,
             onDismiss = {
                 showChatDialog = false
                 repository?.markAsRead(selectedContact!!.phone)
@@ -883,11 +889,67 @@ private fun ContactCard(
 private fun ChatDialog(
     contact: Contact,
     messages: List<Message>,
-    onSendMessage: (String) -> Unit,
+    repository: OfflineMessengerRepository?,
     onDismiss: () -> Unit,
     colors: ThemeColors
 ) {
     var messageText by remember { mutableStateOf("") }
+    var showAttachmentOptions by remember { mutableStateOf(false) }
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+
+    // File picker launchers
+    val imagePickerLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.GetContent()
+    ) { uri: Uri? ->
+        uri?.let {
+            scope.launch {
+                try {
+                    val fileName = getFileName(context, it)
+                    val fileSize = getFileSize(context, it)
+                    val mimeType = context.contentResolver.getType(it) ?: "image/*"
+
+                    repository?.sendMessageWithFile(
+                        phone = contact.phone,
+                        content = "",
+                        messageType = MessageType.IMAGE,
+                        fileUri = it.toString(),
+                        fileName = fileName,
+                        fileSize = fileSize,
+                        mimeType = mimeType
+                    )
+                } catch (e: Exception) {
+                    android.util.Log.e("ChatDialog", "Failed to send image: ${e.message}")
+                }
+            }
+        }
+    }
+
+    val documentPickerLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.GetContent()
+    ) { uri: Uri? ->
+        uri?.let {
+            scope.launch {
+                try {
+                    val fileName = getFileName(context, it)
+                    val fileSize = getFileSize(context, it)
+                    val mimeType = context.contentResolver.getType(it) ?: "application/octet-stream"
+
+                    repository?.sendMessageWithFile(
+                        phone = contact.phone,
+                        content = "",
+                        messageType = MessageType.DOCUMENT,
+                        fileUri = it.toString(),
+                        fileName = fileName,
+                        fileSize = fileSize,
+                        mimeType = mimeType
+                    )
+                } catch (e: Exception) {
+                    android.util.Log.e("ChatDialog", "Failed to send document: ${e.message}")
+                }
+            }
+        }
+    }
 
     androidx.compose.ui.window.Dialog(
         onDismissRequest = onDismiss,
@@ -1000,6 +1062,54 @@ private fun ChatDialog(
                     }
                 }
 
+                // Attachment options popup
+                AnimatedVisibility(
+                    visible = showAttachmentOptions,
+                    enter = expandVertically() + fadeIn(),
+                    exit = shrinkVertically() + fadeOut()
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .background(colors.surfaceVariant.copy(alpha = 0.5f))
+                            .padding(16.dp),
+                        horizontalArrangement = Arrangement.SpaceEvenly
+                    ) {
+                        // Image button
+                        AttachmentButton(
+                            icon = Icons.Default.Favorite,
+                            label = "Image",
+                            color = Color(0xFFE91E63),
+                            onClick = {
+                                imagePickerLauncher.launch("image/*")
+                                showAttachmentOptions = false
+                            }
+                        )
+
+                        // Document button
+                        AttachmentButton(
+                            icon = Icons.Default.Info,
+                            label = "Document",
+                            color = Color(0xFF2196F3),
+                            onClick = {
+                                documentPickerLauncher.launch("*/*")
+                                showAttachmentOptions = false
+                            }
+                        )
+
+                        // Camera button (future)
+                        AttachmentButton(
+                            icon = Icons.Default.Face,
+                            label = "Camera",
+                            color = Color(0xFF4CAF50),
+                            onClick = {
+                                // TODO: Implement camera
+                                showAttachmentOptions = false
+                            }
+                        )
+                    }
+                }
+
                 // Input
                 Row(
                     modifier = Modifier
@@ -1008,6 +1118,21 @@ private fun ChatDialog(
                         .padding(16.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
+                    // Attachment button
+                    IconButton(
+                        onClick = { showAttachmentOptions = !showAttachmentOptions },
+                        modifier = Modifier.size(40.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Add,
+                            contentDescription = "Attach",
+                            tint = Color(0xFF00BCD4),
+                            modifier = Modifier.size(24.dp)
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.width(8.dp))
+
                     Box(
                         modifier = Modifier
                             .weight(1f)
@@ -1042,7 +1167,9 @@ private fun ChatDialog(
                     FloatingActionButton(
                         onClick = {
                             if (messageText.isNotBlank()) {
-                                onSendMessage(messageText)
+                                scope.launch {
+                                    repository?.sendMessage(contact.phone, messageText)
+                                }
                                 messageText = ""
                             }
                         },
@@ -1062,10 +1189,48 @@ private fun ChatDialog(
 }
 
 @Composable
+private fun AttachmentButton(
+    icon: ImageVector,
+    label: String,
+    color: Color,
+    onClick: () -> Unit
+) {
+    val colors = SafeSphereThemeColors
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        modifier = Modifier.clickable(onClick = onClick)
+    ) {
+        Box(
+            modifier = Modifier
+                .size(56.dp)
+                .clip(CircleShape)
+                .background(color.copy(alpha = 0.2f)),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(
+                imageVector = icon,
+                contentDescription = label,
+                tint = color,
+                modifier = Modifier.size(28.dp)
+            )
+        }
+        Spacer(modifier = Modifier.height(8.dp))
+        Text(
+            text = label,
+            fontSize = 12.sp,
+            color = colors.textSecondary,
+            fontWeight = FontWeight.Medium
+        )
+    }
+}
+
+@Composable
 private fun MessageBubble(
     message: Message,
     colors: ThemeColors
 ) {
+    val context = LocalContext.current
+
     Row(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = if (message.isSent) Arrangement.End else Arrangement.Start
@@ -1090,12 +1255,140 @@ private fun MessageBubble(
                 .padding(12.dp)
         ) {
             Column {
-                Text(
-                    text = message.content,
-                    fontSize = 14.sp,
-                    color = if (message.isSent) Color.White else colors.textPrimary,
-                    lineHeight = 18.sp
-                )
+                // Message content based on type
+                when (message.messageType) {
+                    MessageType.IMAGE -> {
+                        // Image message
+                        message.fileUri?.let { uri ->
+                            AsyncImage(
+                                model = Uri.parse(uri),
+                                contentDescription = "Image",
+                                modifier = Modifier
+                                    .heightIn(max = 200.dp)
+                                    .fillMaxWidth()
+                                    .clip(RoundedCornerShape(8.dp))
+                                    .clickable {
+                                        // Open image in full screen
+                                        val intent = Intent(Intent.ACTION_VIEW).apply {
+                                            setDataAndType(Uri.parse(uri), "image/*")
+                                            flags = Intent.FLAG_GRANT_READ_URI_PERMISSION
+                                        }
+                                        context.startActivity(intent)
+                                    },
+                                contentScale = ContentScale.Crop
+                            )
+                            if (message.content.isNotBlank()) {
+                                Spacer(modifier = Modifier.height(4.dp))
+                                Text(
+                                    text = message.content,
+                                    fontSize = 14.sp,
+                                    color = if (message.isSent) Color.White else colors.textPrimary
+                                )
+                            }
+                        }
+                    }
+
+                    MessageType.DOCUMENT -> {
+                        // Document message
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable {
+                                    message.fileUri?.let { uri ->
+                                        val intent = Intent(Intent.ACTION_VIEW).apply {
+                                            setDataAndType(
+                                                Uri.parse(uri),
+                                                message.mimeType ?: "*/*"
+                                            )
+                                            flags = Intent.FLAG_GRANT_READ_URI_PERMISSION
+                                        }
+                                        context.startActivity(
+                                            Intent.createChooser(
+                                                intent,
+                                                "Open with"
+                                            )
+                                        )
+                                    }
+                                },
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .size(40.dp)
+                                    .clip(RoundedCornerShape(8.dp))
+                                    .background(
+                                        if (message.isSent)
+                                            Color.White.copy(alpha = 0.2f)
+                                        else
+                                            Color(0xFF2196F3).copy(alpha = 0.2f)
+                                    ),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Info,
+                                    contentDescription = "Document",
+                                    tint = if (message.isSent) Color.White else Color(0xFF2196F3),
+                                    modifier = Modifier.size(20.dp)
+                                )
+                            }
+
+                            Spacer(modifier = Modifier.width(12.dp))
+
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = message.fileName ?: "Document",
+                                    fontSize = 14.sp,
+                                    fontWeight = FontWeight.Medium,
+                                    color = if (message.isSent) Color.White else colors.textPrimary,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                                message.fileSize?.let { size ->
+                                    Text(
+                                        text = formatFileSize(size),
+                                        fontSize = 12.sp,
+                                        color = if (message.isSent)
+                                            Color.White.copy(alpha = 0.7f)
+                                        else
+                                            colors.textSecondary
+                                    )
+                                }
+                            }
+                        }
+                    }
+
+                    MessageType.VOICE, MessageType.VIDEO -> {
+                        // Voice/Video message placeholder
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(
+                                imageVector = if (message.messageType == MessageType.VOICE)
+                                    Icons.Default.Star
+                                else
+                                    Icons.Default.Star,
+                                contentDescription = null,
+                                tint = if (message.isSent) Color.White else Color(0xFF4CAF50),
+                                modifier = Modifier.size(20.dp)
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = if (message.messageType == MessageType.VOICE) "Voice message" else "Video message",
+                                fontSize = 14.sp,
+                                color = if (message.isSent) Color.White else colors.textPrimary
+                            )
+                        }
+                    }
+
+                    else -> {
+                        // Text message
+                        Text(
+                            text = message.content,
+                            fontSize = 14.sp,
+                            color = if (message.isSent) Color.White else colors.textPrimary,
+                            lineHeight = 18.sp
+                        )
+                    }
+                }
+
                 Spacer(modifier = Modifier.height(4.dp))
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
@@ -1183,4 +1476,50 @@ private fun loadContactsFromPhone(context: Context): List<Contact> {
     }
 
     return contacts.distinctBy { it.phone }
+}
+
+/**
+ * Get file name from URI
+ */
+private fun getFileName(context: Context, uri: Uri): String {
+    var fileName = "unknown"
+    val cursor = context.contentResolver.query(uri, null, null, null, null)
+    cursor?.use {
+        if (it.moveToFirst()) {
+            val nameIndex = it.getColumnIndex(OpenableColumns.DISPLAY_NAME)
+            if (nameIndex >= 0) {
+                fileName = it.getString(nameIndex)
+            }
+        }
+    }
+    return fileName
+}
+
+/**
+ * Get file size from URI
+ */
+private fun getFileSize(context: Context, uri: Uri): Long {
+    var fileSize = 0L
+    val cursor = context.contentResolver.query(uri, null, null, null, null)
+    cursor?.use {
+        if (it.moveToFirst()) {
+            val sizeIndex = it.getColumnIndex(OpenableColumns.SIZE)
+            if (sizeIndex >= 0) {
+                fileSize = it.getLong(sizeIndex)
+            }
+        }
+    }
+    return fileSize
+}
+
+/**
+ * Format file size to human-readable format
+ */
+private fun formatFileSize(size: Long): String {
+    return when {
+        size < 1024 -> "$size B"
+        size < 1024 * 1024 -> "${size / 1024} KB"
+        size < 1024 * 1024 * 1024 -> "${size / (1024 * 1024)} MB"
+        else -> "${size / (1024 * 1024 * 1024)} GB"
+    }
 }

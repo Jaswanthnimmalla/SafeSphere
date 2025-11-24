@@ -82,7 +82,7 @@ class BackupManager(private val context: Context) {
                             category = entry.category.name,
                             strengthScore = entry.strengthScore,
                             createdAt = entry.createdAt,
-                            updatedAt = entry.updatedAt
+                            updatedAt = entry.modifiedAt
                         )
                     }
                 } else emptyList(),
@@ -93,10 +93,10 @@ class BackupManager(private val context: Context) {
                             title = item.title,
                             encryptedContent = item.encryptedContent,
                             category = item.category.name,
-                            size = item.size,
+                            size = item.size.toLong(),
                             isEncrypted = item.isEncrypted,
                             createdAt = item.createdAt,
-                            updatedAt = item.updatedAt
+                            updatedAt = item.createdAt
                         )
                     }
                 } else emptyList()
@@ -188,8 +188,7 @@ class BackupManager(private val context: Context) {
                         category = item.category,
                         size = item.size,
                         isEncrypted = item.isEncrypted,
-                        createdAt = item.createdAt,
-                        updatedAt = item.updatedAt
+                        createdAt = item.createdAt
                     )
                     vaultItemsRestored++
                 } catch (e: Exception) {

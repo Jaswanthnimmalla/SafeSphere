@@ -2,6 +2,7 @@ package com.runanywhere.startup_hackathon20.viewmodels
 
 import android.app.Application
 import android.content.Context
+import android.content.SharedPreferences
 import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
 import android.util.Log
@@ -152,19 +153,17 @@ class SafeSphereViewModel(application: Application) : AndroidViewModel(applicati
     private fun initializeWelcomeMessage() {
         val welcomeMessage = SafeSphereChatMessage(
             content = "👋 Welcome to Privacy AI!\n\n" +
-                    "I'm your completely offline AI assistant. All conversations stay on your device - no internet required!\n\n" +
-                    "🤖 What I can help with:\n" +
+                    "I'm your completely offline AI assistant, ready to help! All conversations stay on your device - no internet required after initial setup.\n\n" +
+                    "🤖 Ask me anything about:\n" +
                     "• Privacy & encryption questions\n" +
                     "• Security best practices\n" +
                     "• SafeSphere features explained\n" +
                     "• Data protection advice\n" +
-                    "• Threat prevention tips\n\n" +
-                    "💡 First time setup:\n" +
-                    "1. Tap Menu (☰) → AI Models\n" +
-                    "2. Download a model (try SafeSphere Privacy Advisor)\n" +
-                    "3. Tap '▶️ Load Model for Privacy AI'\n" +
-                    "4. Come back and ask me anything!\n\n" +
-                    "🔒 100% Private: All AI responses are generated offline using advanced language models running directly on your device.",
+                    "• Threat prevention tips\n" +
+                    "• Password security\n" +
+                    "• Safe browsing practices\n\n" +
+                    "💬 Just type your question below and I'll respond instantly!\n\n" +
+                    "🔒 100% Private: All AI responses are generated offline using advanced language models running directly on your device. No cloud, no tracking, no data collection. Your conversations never leave your phone.",
             isUser = false,
             timestamp = System.currentTimeMillis()
         )
@@ -824,6 +823,41 @@ class SafeSphereViewModel(application: Application) : AndroidViewModel(applicati
         _recentActivityCount.value =
             activityHistory.count { it.timestamp > System.currentTimeMillis() - 1000 * 60 }
         _lastActivityTimestamp.value = record.timestamp
+
+        // Persist to SharedPreferences for real-time dashboard
+        val prefs = getApplication<Application>().getSharedPreferences(
+            "safesphere_realtime",
+            Context.MODE_PRIVATE
+        )
+        val editor = prefs.edit()
+
+        // Increment counters based on action type
+        when (action) {
+            UserAction.VAULT_VIEW, UserAction.VAULT_ADD, UserAction.VAULT_EDIT, UserAction.VAULT_DELETE -> {
+                val vaultCount = prefs.getInt("total_vault_accesses", 0) + 1
+                editor.putInt("total_vault_accesses", vaultCount)
+            }
+
+            UserAction.PASSWORD_VIEW, UserAction.PASSWORD_ADD -> {
+                val passwordCount = prefs.getInt("total_password_views", 0) + 1
+                editor.putInt("total_password_views", passwordCount)
+            }
+
+            else -> {
+                // Count as general activity
+            }
+        }
+
+        // Update total access count
+        val totalCount = prefs.getInt("total_accesses", 0) + 1
+        editor.putInt("total_accesses", totalCount)
+
+        // Set session start time if not exists
+        if (!prefs.contains("session_start")) {
+            editor.putLong("session_start", System.currentTimeMillis())
+        }
+
+        editor.apply()
     }
 
     // ==================== THEME MANAGEMENT ====================
@@ -901,7 +935,8 @@ enum class SafeSphereScreen {
     CONTACT_US,
     SCREENSHOT_GUARDIAN,
     CAMERA_SCANNER,  // New camera document scanner
-    OFFLINE_MESSENGER  // New offline messenger with local contacts
+    OFFLINE_MESSENGER,  // New offline messenger with local contacts
+    BACKUP_RESTORE  // New backup & restore feature
 }
 
 /**
