@@ -292,6 +292,52 @@ class PrivacyVaultRepository private constructor(private val context: Context) {
     }
 
     /**
+     * Restore vault item from backup
+     */
+    suspend fun restoreItemFromBackup(
+        id: String,
+        title: String,
+        encryptedContent: String,
+        category: String,
+        size: Long,
+        isEncrypted: Boolean,
+        createdAt: Long,
+        updatedAt: Long
+    ): Result<Unit> = withContext(Dispatchers.IO) {
+        try {
+            val categoryEnum = try {
+                VaultCategory.valueOf(category)
+            } catch (e: Exception) {
+                VaultCategory.OTHER
+            }
+
+            val item = PrivacyVaultItem(
+                id = id,
+                title = title,
+                encryptedContent = encryptedContent,
+                category = categoryEnum,
+                size = size,
+                isEncrypted = isEncrypted,
+                createdAt = createdAt,
+                updatedAt = updatedAt
+            )
+
+            // Add or update item
+            val existingIndex = _vaultItems.value.indexOfFirst { it.id == id }
+            _vaultItems.value = if (existingIndex >= 0) {
+                _vaultItems.value.toMutableList().apply { set(existingIndex, item) }
+            } else {
+                _vaultItems.value + item
+            }
+
+            saveVaultItems()
+            Result.success(Unit)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    /**
      * Initialize vault with demo data for showcasing features
      */
     suspend fun initializeDemoData() {

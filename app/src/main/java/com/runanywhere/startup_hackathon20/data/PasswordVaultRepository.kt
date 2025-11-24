@@ -414,6 +414,57 @@ class PasswordVaultRepository private constructor(private val context: Context) 
         }
     }
 
+    /**
+     * Save password from backup (used during restore)
+     */
+    suspend fun savePasswordFromBackup(
+        id: String,
+        service: String,
+        username: String,
+        encryptedPassword: String,
+        url: String,
+        notes: String,
+        category: String,
+        strengthScore: Int,
+        createdAt: Long,
+        updatedAt: Long
+    ): Result<Unit> = withContext(Dispatchers.IO) {
+        try {
+            val categoryEnum = try {
+                PasswordCategory.valueOf(category)
+            } catch (e: Exception) {
+                PasswordCategory.OTHER
+            }
+
+            val entry = PasswordVaultEntry(
+                id = id,
+                service = service,
+                username = username,
+                encryptedPassword = encryptedPassword,
+                url = url,
+                notes = notes,
+                category = categoryEnum,
+                strengthScore = strengthScore,
+                createdAt = createdAt,
+                modifiedAt = updatedAt,
+                signature = SecurityManager.sign("$service$username$encryptedPassword")
+            )
+
+            // Add or update entry
+            val existingIndex = _passwords.value.indexOfFirst { it.id == id }
+            _passwords.value = if (existingIndex >= 0) {
+                _passwords.value.toMutableList().apply { set(existingIndex, entry) }
+            } else {
+                _passwords.value + entry
+            }
+
+            savePasswordsToFile()
+            Result.success(Unit)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
     // ==================== PERSISTENCE ====================
 
     /**
