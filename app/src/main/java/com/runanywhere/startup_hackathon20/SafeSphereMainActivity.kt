@@ -1,0 +1,2252 @@
+package com.runanywhere.startup_hackathon20
+
+import com.runanywhere.startup_hackathon20.ui.AdvancedDataMapScreen
+import android.os.Bundle
+import androidx.activity.ComponentActivity
+import androidx.activity.compose.BackHandler
+import androidx.activity.compose.setContent
+import androidx.activity.enableEdgeToEdge
+import androidx.activity.viewModels
+import androidx.fragment.app.FragmentActivity
+import androidx.compose.animation.*
+import androidx.compose.animation.core.*
+import androidx.compose.foundation.*
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.*
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.blur
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.scale
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import androidx.compose.ui.zIndex
+import com.runanywhere.startup_hackathon20.data.*
+import com.runanywhere.startup_hackathon20.viewmodels.SafeSphereViewModel
+import com.runanywhere.startup_hackathon20.viewmodels.SafeSphereScreen
+import com.runanywhere.startup_hackathon20.viewmodels.AppNotification
+import com.runanywhere.startup_hackathon20.viewmodels.NotificationType
+import com.runanywhere.startup_hackathon20.ui.*
+import kotlinx.coroutines.launch
+import java.text.SimpleDateFormat
+import java.util.*
+import kotlin.compareTo
+import kotlin.div
+
+/**
+ * SafeSphere - Privacy-First Mobile Application
+ *
+ * Main Activity containing all UI screens and navigation
+ *
+ * Features:
+ * - Onboarding & Awareness
+ * - Dashboard with quick access
+ * - Privacy Vault (encrypted storage)
+ * - Offline AI Chat
+ * - Data Map (visualization)
+ * - Threat Simulation (educational)
+ * - Settings & Consent
+ * - Model Management
+ */
+class SafeSphereMainActivity : FragmentActivity() {
+
+    private val viewModel: SafeSphereViewModel by viewModels()
+
+
+/**
+ * Main app container with navigation
+ */
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        
+        // Enable edge-to-edge for gesture navigation
+        enableEdgeToEdge()
+
+        setContent {
+            // Collect theme state
+            val isDarkTheme by viewModel.isDarkTheme.collectAsState()
+
+            SafeSphereTheme(isDark = isDarkTheme) {
+                SafeSphereApp(viewModel)
+            }
+        }
+    }
+
+    override fun onStop() {
+        super.onStop()
+        // Mark app as stopped (going to background)
+        val prefs = getSharedPreferences("safesphere_prefs", MODE_PRIVATE)
+        prefs.edit().putBoolean("app_in_background", true).apply()
+    }
+
+    override fun onStart() {
+        super.onStart()
+        // App is coming to foreground
+        // The lock state will be checked in SafeSphereApp composable
+    }
+}
+
+/**
+ * Enhanced Real-time Notification Popup with Colorful Borders
+ * Shows when a new notification arrives with high visibility
+ */
+@Composable
+fun NotificationPopup(
+    notification: AppNotification,
+    onDismiss: () -> Unit,
+    onClick: () -> Unit
+) {
+    val colors = SafeSphereThemeColors
+    var visible by remember { mutableStateOf(true) }
+
+    // Get colors based on notification type
+    val notificationColor = when (notification.type) {
+        NotificationType.ERROR -> Color(0xFFE53935) // Vibrant Red
+        NotificationType.INFO -> Color(0xFF1E88E5) // Vibrant Blue
+        NotificationType.SUCCESS -> Color(0xFF43A047) // Vibrant Green
+        NotificationType.WARNING -> Color(0xFFFFB300) // Vibrant Orange
+    }
+
+    val notificationIcon = when (notification.type) {
+        NotificationType.ERROR -> "⚠️"
+        NotificationType.INFO -> "ℹ️"
+        NotificationType.SUCCESS -> "✅"
+        NotificationType.WARNING -> "⚠️"
+    }
+
+    LaunchedEffect(notification) {
+        // Auto-dismiss after 5 seconds
+        kotlinx.coroutines.delay(5000)
+        visible = false
+        kotlinx.coroutines.delay(300) // Wait for animation
+        onDismiss()
+    }
+    
+    AnimatedVisibility(
+        visible = visible,
+        enter = slideInVertically(initialOffsetY = { -it }) + fadeIn() + expandVertically(),
+        exit = slideOutVertically(targetOffsetY = { -it }) + fadeOut() + shrinkVertically()
+    ) {
+        Card(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 12.dp, vertical = 8.dp)
+                .clickable {
+                    visible = false
+                    onClick()
+                },
+            shape = RoundedCornerShape(20.dp),
+            colors = CardDefaults.cardColors(
+                containerColor = colors.surface
+            ),
+            elevation = CardDefaults.cardElevation(
+                defaultElevation = 12.dp
+            )
+        ) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .border(
+                        width = 3.dp,
+                        brush = Brush.horizontalGradient(
+                            colors = listOf(
+                                notificationColor,
+                                notificationColor.copy(alpha = 0.7f),
+                                notificationColor
+                            )
+                        ),
+                        shape = RoundedCornerShape(20.dp)
+                    )
+                    .background(
+                        Brush.verticalGradient(
+                            colors = listOf(
+                                notificationColor.copy(alpha = 0.15f),
+                                colors.surface
+                            )
+                        )
+                    )
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(16.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    // Large colorful icon
+                    Box(
+                        modifier = Modifier
+                            .size(64.dp)
+                            .clip(CircleShape)
+                            .background(
+                                Brush.radialGradient(
+                                    colors = listOf(
+                                        notificationColor.copy(alpha = 0.25f),
+                                        notificationColor.copy(alpha = 0.08f)
+                                    )
+                                )
+                            )
+                            .border(
+                                width = 2.dp,
+                                color = notificationColor,
+                                shape = CircleShape
+                            ),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = notificationIcon,
+                            fontSize = 36.sp
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.width(16.dp))
+
+                    Column(
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        // Title with color accent
+                        Text(
+                            text = notification.title,
+                            fontSize = 17.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = notificationColor
+                        )
+
+                        Spacer(modifier = Modifier.height(6.dp))
+
+                        // Message text
+                        Text(
+                            text = notification.message,
+                            fontSize = 14.sp,
+                            color = colors.textPrimary,
+                            lineHeight = 20.sp,
+                            maxLines = 3
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.width(8.dp))
+
+                    // Close button
+                    IconButton(
+                        onClick = {
+                            visible = false
+                            onDismiss()
+                        },
+                        modifier = Modifier.size(40.dp)
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(32.dp)
+                                .clip(CircleShape)
+                                .background(notificationColor.copy(alpha = 0.1f)),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.Filled.Close,
+                                contentDescription = "Dismiss",
+                                tint = notificationColor,
+                                modifier = Modifier.size(20.dp)
+                            )
+                        }
+                    }
+                }
+
+                // Bottom colored strip
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(6.dp)
+                        .align(Alignment.BottomCenter)
+                        .background(
+                            Brush.horizontalGradient(
+                                colors = listOf(
+                                    notificationColor.copy(alpha = 0.3f),
+                                    notificationColor,
+                                    notificationColor.copy(alpha = 0.3f)
+                                )
+                            )
+                        )
+                )
+            }
+        }
+    }
+}
+
+/**
+ * Main app container with navigation
+ */
+@Composable
+fun SafeSphereApp(
+    viewModel: SafeSphereViewModel
+) {
+    // Splash screen state
+    var showSplash by remember { mutableStateOf(true) }
+
+    // Collect theme state
+    val isDarkTheme by viewModel.isDarkTheme.collectAsState()
+
+    if (showSplash) {
+        SplashScreen(onSplashComplete = { showSplash = false })
+    } else {
+        MainAppContent(viewModel)
+    }
+}
+
+/**
+ * Main app content (after splash screen)
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun MainAppContent(
+    viewModel: SafeSphereViewModel
+) {
+    val colors = SafeSphereThemeColors
+    val currentScreen by viewModel.currentScreen.collectAsState()
+    val currentUser by viewModel.currentUser.collectAsState()
+    val uiMessage by viewModel.uiMessage.collectAsState()
+    val unreadCount by viewModel.unreadNotificationCount.collectAsState()
+    val latestNotification by viewModel.latestNotification.collectAsState()
+    val isDarkTheme by viewModel.isDarkTheme.collectAsState()
+    val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
+    val scope = rememberCoroutineScope()
+
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val activity = context as? FragmentActivity
+
+    // Biometric lock state
+    var isAppLocked by remember { mutableStateOf(true) }
+    var biometricAttempts by remember { mutableStateOf(0) }
+    val maxBiometricAttempts = 5
+    var showPasswordFallback by remember { mutableStateOf(false) }
+
+    // Make biometric settings reactive by creating state
+    val prefs =
+        context.getSharedPreferences("safesphere_prefs", android.content.Context.MODE_PRIVATE)
+
+    var isBiometricEnabled by remember {
+        mutableStateOf(prefs.getBoolean("biometric_enabled", false))
+    }
+
+    var wasInBackground by remember {
+        mutableStateOf(prefs.getBoolean("app_in_background", false))
+    }
+
+
+    // Re-read values on every composition to stay fresh
+    LaunchedEffect(Unit) {
+        isBiometricEnabled = prefs.getBoolean("biometric_enabled", false)
+        wasInBackground = prefs.getBoolean("app_in_background", false)
+
+        android.util.Log.d(
+            "SafeSphere",
+            "App opened - currentUser: ${currentUser != null}, biometric: $isBiometricEnabled, wasInBackground: $wasInBackground"
+        )
+    }
+
+    // Show biometric prompt automatically when app opens (if enabled and user logged in)
+    LaunchedEffect(currentUser, isBiometricEnabled, wasInBackground) {
+        android.util.Log.d(
+            "SafeSphere",
+            "LaunchedEffect triggered - currentUser: ${currentUser != null}, biometric: $isBiometricEnabled, wasInBackground: $wasInBackground"
+        )
+
+        if (currentUser != null && isBiometricEnabled && wasInBackground && activity != null) {
+            android.util.Log.d("SafeSphere", "Showing biometric prompt")
+            // App needs to be unlocked with biometric
+            com.runanywhere.startup_hackathon20.security.BiometricAuthManager.authenticate(
+                activity = activity,
+                title = "Unlock SafeSphere",
+                subtitle = "Use biometric to unlock",
+                onSuccess = {
+                    android.util.Log.d("SafeSphere", "Biometric success")
+                    isAppLocked = false
+                    biometricAttempts = 0
+                    wasInBackground = false
+                    // Clear the background flag
+                    prefs.edit().putBoolean("app_in_background", false).apply()
+                },
+                onError = { errorCode, errorMessage ->
+                    android.util.Log.e("SafeSphere", "Biometric error: $errorCode - $errorMessage")
+                },
+                onFailed = {
+                    android.util.Log.d("SafeSphere", "Biometric failed")
+                    biometricAttempts++
+                    if (biometricAttempts >= maxBiometricAttempts) {
+                        showPasswordFallback = true
+                    }
+                }
+            )
+        } else {
+            android.util.Log.d("SafeSphere", "No biometric required, unlocking")
+            // No biometric required, unlock immediately
+            isAppLocked = false
+        }
+    }
+
+    // Handle back button/gesture navigation
+    BackHandler(enabled = true) {
+        scope.launch {
+            // Close drawer if open
+            if (drawerState.isOpen) {
+                drawerState.close()
+            } else {
+                // Navigate back based on current screen
+                val canGoBack = viewModel.navigateBack()
+                if (!canGoBack) {
+                    // On dashboard or login, exit app (handled by system)
+                }
+            }
+        }
+    }
+
+    // Screens that don't need navigation drawer
+    val authScreens = listOf(
+        SafeSphereScreen.LOGIN,
+        SafeSphereScreen.REGISTER,
+        SafeSphereScreen.ONBOARDING
+    )
+
+    Surface(
+        modifier = Modifier.fillMaxSize(),
+        color = colors.background
+    ) {
+        // Background gradient effect
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(
+                    Brush.verticalGradient(
+                        colors = listOf(
+                            colors.background,
+                            colors.backgroundDark
+                        )
+                    )
+                )
+        ) {
+            // Show biometric lock screen if app is locked
+            if (isAppLocked && currentUser != null && isBiometricEnabled) {
+                BiometricLockScreen(
+                    attempts = biometricAttempts,
+                    maxAttempts = maxBiometricAttempts,
+                    showPasswordFallback = showPasswordFallback,
+                    onRetryBiometric = {
+                        if (activity != null && biometricAttempts < maxBiometricAttempts) {
+                            com.runanywhere.startup_hackathon20.security.BiometricAuthManager.authenticate(
+                                activity = activity,
+                                title = "Unlock SafeSphere",
+                                subtitle = "Attempt ${biometricAttempts + 1} of $maxBiometricAttempts",
+                                onSuccess = {
+                                    isAppLocked = false
+                                    biometricAttempts = 0
+                                    wasInBackground = false
+                                    prefs.edit().putBoolean("app_in_background", false).apply()
+                                },
+                                onError = { errorCode, errorMessage ->
+                                    // Error occurred
+                                },
+                                onFailed = {
+                                    biometricAttempts++
+                                    if (biometricAttempts >= maxBiometricAttempts) {
+                                        showPasswordFallback = true
+                                    }
+                                }
+                            )
+                        }
+                    },
+                    onPasswordLogin = { email, password ->
+                        // Verify password
+                        scope.launch {
+                            val credentials = LoginCredentials(email, password)
+                            val result = viewModel.login(credentials)
+                            // If login successful, unlock app
+                            if (result is AuthResult.Success) {
+                                isAppLocked = false
+                                biometricAttempts = 0
+                                showPasswordFallback = false
+                                wasInBackground = false
+                                // Clear the background flag
+                                prefs.edit().putBoolean("app_in_background", false).apply()
+                            }
+                        }
+                    }
+                )
+            } else {
+                // Show normal app content
+                // Check if current screen needs drawer
+                if (currentScreen in authScreens) {
+                    // Show screens without drawer (Login, Register, Onboarding)
+                    when (currentScreen) {
+                        SafeSphereScreen.LOGIN -> LoginScreen(
+                            onLoginSuccess = { user ->
+                                // User logged in successfully
+                            },
+                            onNavigateToRegister = {
+                                viewModel.navigateToScreen(SafeSphereScreen.REGISTER)
+                            },
+                            onLogin = { credentials ->
+                                viewModel.login(credentials)
+                            },
+                            onNavigateToDashboard = {
+                                viewModel.navigateToScreen(SafeSphereScreen.DASHBOARD)
+                            }
+                        )
+
+                        SafeSphereScreen.REGISTER -> RegisterScreen(
+                            onRegisterSuccess = { user ->
+                                // User registered successfully
+                            },
+                            onNavigateToLogin = {
+                                viewModel.navigateToScreen(SafeSphereScreen.LOGIN)
+                            },
+                            onRegister = { data ->
+                                viewModel.register(data)
+                            },
+                            onNavigateToOnboarding = {
+                                viewModel.navigateToScreen(SafeSphereScreen.ONBOARDING)
+                            }
+                        )
+
+                        SafeSphereScreen.ONBOARDING -> OnboardingScreen(viewModel)
+                        else -> {}
+                    }
+                } else {
+                    // Show screens WITH navigation drawer and bottom nav
+                    ModalNavigationDrawer(
+                        drawerState = drawerState,
+                        gesturesEnabled = true, // Enable swipe gestures
+                        drawerContent = {
+                            SafeSphereDrawerContent(
+                                currentUser = currentUser,
+                                currentScreen = currentScreen,
+                                onNavigate = { screen ->
+                                    viewModel.navigateToScreen(screen)
+                                    scope.launch { drawerState.close() }
+                                },
+                                onLogout = {
+                                    viewModel.logout()
+                                },
+                                isDarkTheme = isDarkTheme,
+                                onToggleTheme = { viewModel.toggleTheme() }
+                            )
+                        }
+                    ) {
+                        Scaffold(
+                            topBar = {
+                                BeautifulTopBar(
+                                    title = getScreenTitle(currentScreen),
+                                    onMenuClick = {
+                                        scope.launch {
+                                            if (drawerState.isClosed) drawerState.open()
+                                            else drawerState.close()
+                                        }
+                                    },
+                                    onNotificationClick = {
+                                        viewModel.navigateToScreen(SafeSphereScreen.NOTIFICATIONS)
+                                    },
+                                    unreadCount = unreadCount
+                                )
+                            },
+                            bottomBar = {
+                                // Removed bottom bar
+                            },
+                            containerColor = Color.Transparent
+                        ) { paddingValues ->
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .padding(paddingValues)
+                            ) {
+                                when (currentScreen) {
+                                    SafeSphereScreen.DASHBOARD -> EnhancedDashboardScreen(viewModel)
+                                    SafeSphereScreen.PRIVACY_VAULT -> EnhancedPrivacyVaultScreen(
+                                        viewModel
+                                    )
+                                    SafeSphereScreen.PASSWORDS -> EnhancedPasswordsScreen(viewModel)
+                                    SafeSphereScreen.AI_CHAT -> EnhancedAIChatScreen(viewModel)
+                                    SafeSphereScreen.DATA_MAP -> AdvancedDataMapScreen(viewModel)
+                                    SafeSphereScreen.THREAT_SIMULATION -> AdvancedThreatSimulationScreen(
+                                        viewModel
+                                    )
+
+                                    SafeSphereScreen.SETTINGS -> EnhancedSettingsScreen(viewModel)
+                                    SafeSphereScreen.MODELS -> EnhancedModelsScreen(viewModel)
+                                    SafeSphereScreen.NOTIFICATIONS -> NotificationsScreen(viewModel)
+                                    SafeSphereScreen.PASSWORD_HEALTH -> PasswordHealthScreen(
+                                        viewModel = viewModel,
+                                        onNavigateBack = { viewModel.navigateBack() }
+                                    )
+                                    SafeSphereScreen.AI_PREDICTOR -> EnhancedAIPredictorScreen(
+                                        viewModel
+                                    )
+
+                                    SafeSphereScreen.VOICE_ASSISTANT -> VoiceAssistantScreen(
+                                        viewModel
+                                    )
+                                    
+                                    SafeSphereScreen.DESKTOP_SYNC -> DesktopSyncScreen(viewModel)
+
+                                    SafeSphereScreen.ABOUT_US -> AboutUsScreen(viewModel)
+                                    SafeSphereScreen.BLOGS -> BlogsScreen(viewModel)
+                                    SafeSphereScreen.CONTACT_US -> ContactUsScreen(viewModel)
+                                    SafeSphereScreen.CAMERA_SCANNER -> CameraDocumentScannerScreen(
+                                        viewModel = viewModel,
+                                        onNavigateBack = { viewModel.navigateBack() }
+                                    )
+
+                                    SafeSphereScreen.OFFLINE_MESSENGER -> OfflineMessengerScreen(
+                                        viewModel = viewModel,
+                                        onNavigateBack = { viewModel.navigateBack() }
+                                    )
+
+                                    else -> {}
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Show real-time notification popup
+            latestNotification?.let { notification ->
+                if (!notification.isRead) {
+                    Box(
+                        modifier = Modifier
+                            .align(Alignment.TopCenter)
+                            .padding(top = 80.dp) // Below the top bar
+                            .zIndex(20f)
+                    ) {
+                        NotificationPopup(
+                            notification = notification,
+                            onDismiss = {
+                                viewModel.markNotificationAsRead(notification.id)
+                            },
+                            onClick = {
+                                viewModel.markNotificationAsRead(notification.id)
+                                viewModel.navigateToScreen(SafeSphereScreen.NOTIFICATIONS)
+                            }
+                        )
+                    }
+                }
+            }
+
+
+            // Show UI messages as snackbar
+            uiMessage?.let { message ->
+                Snackbar(
+                    modifier = Modifier
+                        .align(Alignment.BottomCenter)
+                        .padding(16.dp)
+                        .zIndex(10f),
+                    containerColor = colors.primary,
+                    contentColor = Color.White
+                ) {
+                    Text(message)
+                }
+                LaunchedEffect(message) {
+                    kotlinx.coroutines.delay(3000)
+                    viewModel.clearMessage()
+                }
+            }
+        }
+    }
+}
+
+/**
+ * Biometric Lock Screen - Shown when app is locked
+ */
+@Composable
+fun BiometricLockScreen(
+    attempts: Int,
+    maxAttempts: Int,
+    showPasswordFallback: Boolean,
+    onRetryBiometric: () -> Unit,
+    onPasswordLogin: (email: String, password: String) -> Unit
+) {
+    val colors = SafeSphereThemeColors
+    var email by remember { mutableStateOf("") }
+    var password by remember { mutableStateOf("") }
+
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(
+                Brush.verticalGradient(
+                    colors = listOf(
+                        colors.background,
+                        colors.backgroundDark
+                    )
+                )
+            ),
+        contentAlignment = Alignment.Center
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(32.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center
+        ) {
+            // Logo
+            Text(
+                text = "🔐",
+                fontSize = 80.sp
+            )
+
+            Spacer(modifier = Modifier.height(24.dp))
+
+            Text(
+                text = "SafeSphere Locked",
+                fontSize = 28.sp,
+                fontWeight = FontWeight.Bold,
+                color = colors.textPrimary
+            )
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            if (showPasswordFallback) {
+                // Show password login form
+                Text(
+                    text = "Maximum biometric attempts reached.\nPlease enter your credentials.",
+                    fontSize = 14.sp,
+                    color = colors.error,
+                    textAlign = TextAlign.Center
+                )
+
+                Spacer(modifier = Modifier.height(24.dp))
+
+                // Email field
+                OutlinedTextField(
+                    value = email,
+                    onValueChange = { email = it },
+                    label = { Text("Email") },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true
+                )
+
+                Spacer(modifier = Modifier.height(12.dp))
+
+                // Password field
+                OutlinedTextField(
+                    value = password,
+                    onValueChange = { password = it },
+                    label = { Text("Password") },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true,
+                    visualTransformation = androidx.compose.ui.text.input.PasswordVisualTransformation()
+                )
+
+                Spacer(modifier = Modifier.height(24.dp))
+
+                Button(
+                    onClick = { onPasswordLogin(email, password) },
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = colors.primary
+                    )
+                ) {
+                    Text("Unlock")
+                }
+            } else {
+                // Show biometric prompt status
+                Text(
+                    text = "Use fingerprint or face to unlock",
+                    fontSize = 14.sp,
+                    color = colors.textSecondary,
+                    textAlign = TextAlign.Center
+                )
+
+                Spacer(modifier = Modifier.height(16.dp))
+
+                if (attempts > 0) {
+                    Text(
+                        text = "Attempt $attempts of $maxAttempts failed",
+                        fontSize = 12.sp,
+                        color = colors.error
+                    )
+
+                    Text(
+                        text = "${maxAttempts - attempts} attempts remaining",
+                        fontSize = 12.sp,
+                        color = colors.textSecondary
+                    )
+
+                    Spacer(modifier = Modifier.height(16.dp))
+                }
+
+                // Fingerprint icon
+                Text(
+                    text = "👆",
+                    fontSize = 64.sp
+                )
+
+                Spacer(modifier = Modifier.height(24.dp))
+
+                Button(
+                    onClick = onRetryBiometric,
+                    enabled = attempts < maxAttempts,
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = colors.primary
+                    )
+                ) {
+                    Text("Try Again")
+                }
+            }
+        }
+    }
+}
+
+
+/**
+ * Beautiful Top Bar with Gradient Title
+ */
+@Composable
+fun BeautifulTopBar(
+    title: String,
+    onMenuClick: () -> Unit,
+    onNotificationClick: () -> Unit,
+    unreadCount: Int = 0
+) {
+    val colors = SafeSphereThemeColors
+
+    Surface(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(80.dp),
+        color = colors.surface.copy(alpha = 0.95f),
+        shadowElevation = 4.dp
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(
+                    Brush.horizontalGradient(
+                        colors = listOf(
+                            colors.primary.copy(alpha = 0.1f),
+                            colors.secondary.copy(alpha = 0.1f),
+                            colors.accent.copy(alpha = 0.1f)
+                        )
+                    )
+                )
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(start = 8.dp, top = 20.dp, end = 8.dp, bottom = 0.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                // Left: Menu button (hamburger icon)
+                IconButton(
+                    onClick = onMenuClick,
+                    modifier = Modifier
+                        .size(48.dp)
+                        .clip(CircleShape)
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(40.dp)
+                            .clip(CircleShape)
+                            .background(colors.primary.copy(alpha = 0.1f)),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Filled.Menu,
+                            contentDescription = "Menu",
+                            tint = colors.primary,
+                            modifier = Modifier.size(24.dp)
+                        )
+                    }
+                }
+
+                // Center: Beautiful Gradient Title
+                Text(
+                    text = title,
+                    fontSize = 26.sp,
+                    fontWeight = FontWeight.Bold,
+                    style = androidx.compose.ui.text.TextStyle(
+                        brush = Brush.linearGradient(
+                            colors = listOf(
+                                colors.primary,
+                                colors.secondary,
+                                colors.accent
+                            )
+                        )
+                    ),
+                    modifier = Modifier.weight(1f),
+                    textAlign = TextAlign.Center
+                )
+
+                // Right: Notification button
+                Box {
+                    IconButton(
+                        onClick = onNotificationClick,
+                        modifier = Modifier.size(48.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Notifications,
+                            contentDescription = "Notifications",
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(28.dp)
+                        )
+                    }
+
+                    // Notification count - larger and more prominent
+                    if (unreadCount > 0) {
+                        Text(
+                            text = if (unreadCount > 99) "99+" else unreadCount.toString(),
+                            color = Color.Red,
+                            fontSize = 18.sp,
+                            fontWeight = FontWeight.Bold,
+                            modifier = Modifier
+                                .align(Alignment.TopEnd)
+                                .offset(x = (-2).dp, y = 4.dp)
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+/**
+ * Beautiful Bottom Navigation Bar with 3 Buttons
+ */
+@Composable
+fun BeautifulBottomBar(
+    currentScreen: SafeSphereScreen,
+    onMenuClick: () -> Unit,
+    onHomeClick: () -> Unit,
+    onNotificationClick: () -> Unit
+) {
+    Surface(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(70.dp),
+        color = SafeSphereColors.Surface.copy(alpha = 0.95f),
+        shadowElevation = 8.dp,
+        shape = RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp)
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(
+                    Brush.horizontalGradient(
+                        colors = listOf(
+                            SafeSphereColors.Primary.copy(alpha = 0.05f),
+                            SafeSphereColors.Secondary.copy(alpha = 0.05f),
+                            SafeSphereColors.Accent.copy(alpha = 0.05f)
+                        )
+                    )
+                )
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(horizontal = 24.dp),
+                horizontalArrangement = Arrangement.SpaceEvenly,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                // Left: Unique Menu Button (Hexagon style)
+                BottomNavButton(
+                    icon = Icons.Filled.Menu,
+                    label = "Menu",
+                    isSelected = false,
+                    onClick = onMenuClick,
+                    isUnique = true
+                )
+
+                // Center: Home Button (Large)
+                BottomNavButton(
+                    icon = Icons.Filled.Home,
+                    label = "Home",
+                    isSelected = currentScreen == SafeSphereScreen.DASHBOARD,
+                    onClick = onHomeClick,
+                    isCenter = true
+                )
+
+                // Right: Notification Button
+                BottomNavButton(
+                    icon = Icons.Filled.Notifications,
+                    label = "Alerts",
+                    isSelected = currentScreen == SafeSphereScreen.NOTIFICATIONS,
+                    onClick = onNotificationClick,
+                    showBadge = true
+                )
+            }
+        }
+    }
+}
+
+/**
+ * Bottom Navigation Button
+ */
+@Composable
+fun BottomNavButton(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    label: String,
+    isSelected: Boolean,
+    onClick: () -> Unit,
+    isUnique: Boolean = false,
+    isCenter: Boolean = false,
+    showBadge: Boolean = false
+) {
+    val buttonSize = if (isCenter) 64.dp else 56.dp
+    val iconSize = if (isCenter) 28.dp else 24.dp
+
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        modifier = Modifier.clickable(onClick = onClick)
+    ) {
+        Box(
+            contentAlignment = Alignment.Center
+        ) {
+            // Background
+            if (isUnique) {
+                // Hexagon-like unique shape for menu
+                Box(
+                    modifier = Modifier
+                        .size(buttonSize)
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(
+                            Brush.linearGradient(
+                                colors = listOf(
+                                    SafeSphereColors.Primary,
+                                    SafeSphereColors.Secondary
+                                )
+                            )
+                        ),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = icon,
+                        contentDescription = label,
+                        tint = Color.White,
+                        modifier = Modifier.size(iconSize)
+                    )
+                }
+            } else if (isCenter) {
+                // Large center button with elevation
+                Box(
+                    modifier = Modifier
+                        .size(buttonSize)
+                        .offset(y = (-12).dp)
+                        .clip(CircleShape)
+                        .background(
+                            if (isSelected) {
+                                Brush.linearGradient(
+                                    colors = listOf(
+                                        SafeSphereColors.Primary,
+                                        SafeSphereColors.Secondary
+                                    )
+                                )
+                            } else {
+                                Brush.linearGradient(
+                                    colors = listOf(
+                                        SafeSphereColors.Surface,
+                                        SafeSphereColors.Surface
+                                    )
+                                )
+                            }
+                        )
+                        .border(
+                            width = 2.dp,
+                            brush = Brush.linearGradient(
+                                colors = listOf(
+                                    SafeSphereColors.Primary.copy(alpha = 0.3f),
+                                    SafeSphereColors.Secondary.copy(alpha = 0.3f)
+                                )
+                            ),
+                            shape = CircleShape
+                        ),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = icon,
+                        contentDescription = label,
+                        tint = if (isSelected) Color.White else SafeSphereColors.Primary,
+                        modifier = Modifier.size(iconSize)
+                    )
+                }
+            } else {
+                // Regular button
+                Box(
+                    modifier = Modifier
+                        .size(buttonSize)
+                        .clip(CircleShape)
+                        .background(
+                            if (isSelected) SafeSphereColors.Primary.copy(alpha = 0.15f)
+                            else Color.Transparent
+                        ),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = icon,
+                        contentDescription = label,
+                        tint = if (isSelected) SafeSphereColors.Primary else SafeSphereColors.TextSecondary,
+                        modifier = Modifier.size(iconSize)
+                    )
+                    
+                    // Badge for notifications
+                    if (showBadge && !isSelected) {
+                        Box(
+                            modifier = Modifier
+                                .size(10.dp)
+                                .align(Alignment.TopEnd)
+                                .offset(x = (-8).dp, y = 8.dp)
+                                .clip(CircleShape)
+                                .background(SafeSphereColors.Error)
+                        )
+                    }
+                }
+            }
+        }
+
+        // Label
+        if (!isCenter) {
+            Spacer(modifier = Modifier.height(4.dp))
+            Text(
+                text = label,
+                fontSize = 11.sp,
+                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
+                color = if (isUnique) SafeSphereColors.Primary
+                       else if (isSelected) SafeSphereColors.Primary
+                       else SafeSphereColors.TextSecondary
+            )
+        }
+    }
+}
+
+/**
+ * Get screen title for top bar
+ */
+fun getScreenTitle(screen: SafeSphereScreen): String {
+    return when (screen) {
+        SafeSphereScreen.DASHBOARD -> "SafeSphere"
+        SafeSphereScreen.PRIVACY_VAULT -> "Privacy Vault"
+        SafeSphereScreen.AI_CHAT -> "Privacy AI"
+        SafeSphereScreen.DATA_MAP -> "Data Insights"
+        SafeSphereScreen.THREAT_SIMULATION -> "Security Training"
+        SafeSphereScreen.SETTINGS -> "Settings"
+        SafeSphereScreen.MODELS -> "AI Models"
+        SafeSphereScreen.NOTIFICATIONS -> "Notifications"
+        SafeSphereScreen.PASSWORD_HEALTH -> "Password Health"
+        SafeSphereScreen.AI_PREDICTOR -> "AI Predictor"
+        SafeSphereScreen.VOICE_ASSISTANT -> "Voice Assistant"
+        SafeSphereScreen.DESKTOP_SYNC -> "Desktop Sync"
+        SafeSphereScreen.ABOUT_US -> "About Us"
+        SafeSphereScreen.BLOGS -> "Blog"
+        SafeSphereScreen.CONTACT_US -> "Contact"
+        SafeSphereScreen.CAMERA_SCANNER -> "Image Scanner"
+        SafeSphereScreen.OFFLINE_MESSENGER -> "Offline Messenger"
+        else -> "SafeSphere"
+    }
+}
+
+/**
+ * Onboarding Screen - Explains privacy concepts
+ */
+@Composable
+fun OnboardingScreen(viewModel: SafeSphereViewModel) {
+    val colors = SafeSphereThemeColors
+    var currentPage by remember { mutableStateOf(0) }
+    val pages = listOf(
+        OnboardingPage(
+            title = "Welcome to SafeSphere",
+            description = "Your privacy fortress. All data stays on your device, encrypted with military-grade AES-256.",
+            icon = "🔐",
+            color = colors.primary
+        ),
+        OnboardingPage(
+            title = "Offline AI Power",
+            description = "AI runs entirely on your device. No cloud, no tracking, no data leaks. Complete privacy.",
+            icon = "🤖",
+            color = colors.secondary
+        ),
+        OnboardingPage(
+            title = "Hardware Encryption",
+            description = "Your encryption keys are stored in secure hardware. Even if someone steals your phone, they can't access your data.",
+            icon = "🛡️",
+            color = colors.accent
+        ),
+        OnboardingPage(
+            title = "You're in Control",
+            description = "No backdoors. No cloud sync. No tracking. Your data belongs to you, and only you.",
+            icon = "✨",
+            color = colors.success
+        )
+    )
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(24.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.SpaceBetween
+    ) {
+        Spacer(modifier = Modifier.height(40.dp))
+
+        // Page indicator
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            repeat(pages.size) { index ->
+                Box(
+                    modifier = Modifier
+                        .size(if (index == currentPage) 32.dp else 8.dp, 8.dp)
+                        .clip(CircleShape)
+                        .background(
+                            if (index == currentPage) colors.primary
+                            else colors.textSecondary.copy(alpha = 0.3f)
+                        )
+                        .animateContentSize()
+                )
+            }
+        }
+
+        // Content
+        val page = pages[currentPage]
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            modifier = Modifier.weight(1f),
+            verticalArrangement = Arrangement.Center
+        ) {
+            Text(
+                text = page.icon,
+                fontSize = 80.sp,
+                modifier = Modifier.padding(bottom = 24.dp)
+            )
+
+            Text(
+                text = page.title,
+                fontSize = 28.sp,
+                fontWeight = FontWeight.Bold,
+                color = colors.textPrimary,
+                textAlign = TextAlign.Center
+            )
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            Text(
+                text = page.description,
+                fontSize = 16.sp,
+                color = colors.textSecondary,
+                textAlign = TextAlign.Center,
+                lineHeight = 24.sp,
+                modifier = Modifier.padding(horizontal = 16.dp)
+            )
+        }
+
+        // Navigation buttons
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            if (currentPage > 0) {
+                GlassButton(
+                    text = "Back",
+                    onClick = { currentPage-- },
+                    modifier = Modifier.weight(1f)
+                )
+            } else {
+                Spacer(modifier = Modifier.weight(1f))
+            }
+
+            Spacer(modifier = Modifier.width(16.dp))
+
+            GlassButton(
+                text = if (currentPage == pages.size - 1) "Get Started" else "Next",
+                onClick = {
+                    if (currentPage == pages.size - 1) {
+                        viewModel.initializeDemoData()
+                        viewModel.navigateToScreen(SafeSphereScreen.DASHBOARD)
+                    } else {
+                        currentPage++
+                    }
+                },
+                primary = true,
+                modifier = Modifier.weight(1f)
+            )
+        }
+    }
+}
+
+data class OnboardingPage(
+    val title: String,
+    val description: String,
+    val icon: String,
+    val color: Color
+)
+
+/**
+ * Quick Action Button Component
+ */
+@Composable
+fun QuickActionButton(
+    icon: String,
+    label: String,
+    color: Color,
+    onClick: () -> Unit
+) {
+    val colors = SafeSphereThemeColors
+
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(44.dp)
+            .clip(RoundedCornerShape(12.dp))
+            .background(color.copy(alpha = 0.15f))
+            .border(
+                width = 1.dp,
+                color = color.copy(alpha = 0.3f),
+                shape = RoundedCornerShape(12.dp)
+            )
+            .clickable(onClick = onClick)
+            .padding(horizontal = 12.dp, vertical = 8.dp)
+    ) {
+        Row(
+            modifier = Modifier.fillMaxSize(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.Start
+        ) {
+            Text(
+                text = icon,
+                fontSize = 20.sp
+            )
+            Spacer(modifier = Modifier.width(10.dp))
+            Text(
+                text = label,
+                fontSize = 13.sp,
+                fontWeight = FontWeight.Medium,
+                color = colors.textPrimary
+            )
+        }
+    }
+}
+
+/**
+ * Dashboard Screen - Central hub
+ */
+@Composable
+fun DashboardScreen(viewModel: SafeSphereViewModel) {
+    val colors = SafeSphereThemeColors
+    val isOffline by viewModel.isOfflineMode.collectAsState()
+    val stats by viewModel.storageStats.collectAsState()
+    val vaultItems by viewModel.vaultItems.collectAsState()
+    
+    val context = androidx.compose.ui.platform.LocalContext.current
+    
+    // Get password repository and count
+    val passwordRepository = remember { com.runanywhere.startup_hackathon20.data.PasswordVaultRepository.getInstance(context) }
+    val savedPasswords by passwordRepository.passwords.collectAsState()
+    val passwordCount = savedPasswords.size
+    
+    // Check autofill status
+    val isAutofillEnabled = remember {
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+            val autofillManager = context.getSystemService(android.view.autofill.AutofillManager::class.java)
+            autofillManager?.hasEnabledAutofillServices() == true
+        } else {
+            false
+        }
+    }
+
+    // Calculate password health in real-time
+    val passwordHealth = remember(vaultItems) {
+        if (vaultItems.isEmpty()) {
+            null
+        } else {
+            com.runanywhere.startup_hackathon20.utils.PasswordAnalyzer.analyzePasswords(vaultItems) { encryptedContent ->
+                com.runanywhere.startup_hackathon20.security.SecurityManager.decrypt(
+                    encryptedContent
+                )
+            }
+        }
+    }
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .verticalScroll(rememberScrollState())
+            .padding(16.dp)
+    ) {
+        // Security Score Card
+        // Security Score Card - CENTERED VERSION
+
+        GlassCard(
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Column(
+                modifier = Modifier.padding(20.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Text(
+                    text = "Security Score",
+                    fontSize = 16.sp,
+                    color = colors.textSecondary
+                )
+
+                Spacer(modifier = Modifier.height(12.dp))
+
+                // ✅ FIXED: Added .fillMaxWidth() to center the circle
+                Box(
+                    modifier = Modifier.fillMaxWidth(),
+                    contentAlignment = Alignment.Center
+                ) {
+                    CircularProgressIndicator(
+                        progress = stats.securityScore / 100f,
+                        modifier = Modifier.size(120.dp),
+                        strokeWidth = 12.dp,
+                        color = when {
+                            stats.securityScore >= 90 -> colors.success
+                            stats.securityScore >= 70 -> colors.warning
+                            else -> colors.error
+                        },
+                        trackColor = colors.textSecondary.copy(alpha = 0.1f)
+                    )
+
+                    Text(
+                        text = "${stats.securityScore}",
+                        fontSize = 36.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = colors.textPrimary
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(12.dp))
+
+                Text(
+                    text = "${stats.encryptedItems} of ${stats.totalItems} items encrypted",
+                    fontSize = 14.sp,
+                    color = colors.textSecondary
+                )
+            }
+        }
+
+        Spacer(modifier = Modifier.height(16.dp))
+        
+        // PASSWORD MANAGER QUICK ACCESS CARD - NEW PROMINENT SECTION
+        PasswordManagerQuickAccessCard(
+            passwordCount = passwordCount,
+            isAutofillEnabled = isAutofillEnabled,
+            onViewAllClick = { viewModel.navigateToScreen(SafeSphereScreen.PASSWORDS) },
+            onEnableAutofillClick = {
+                if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+                    val intent = android.content.Intent(android.provider.Settings.ACTION_REQUEST_SET_AUTOFILL_SERVICE)
+                    context.startActivity(intent)
+                }
+            },
+            onAddPasswordClick = { viewModel.navigateToScreen(SafeSphereScreen.PASSWORDS) }
+        )
+        
+        Spacer(modifier = Modifier.height(16.dp))
+
+        // Password Health Card - Show if passwords exist
+        passwordHealth?.let { health ->
+            val breachedCount = health.passwordDetails.count { it.breachResult?.isBreached == true }
+
+            GlassCard(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { viewModel.navigateToScreen(SafeSphereScreen.PASSWORD_HEALTH) }
+            ) {
+                Column(
+                    modifier = Modifier.padding(20.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "🔐 Password Health",
+                            fontSize = 18.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = colors.textPrimary
+                        )
+
+                        Icon(
+                            imageVector = Icons.Filled.ArrowForward,
+                            contentDescription = "View Details",
+                            tint = colors.primary,
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(16.dp))
+
+                    // Breach Alert Banner (if any breached passwords)
+                    if (breachedCount > 0) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(Color(0xFFD32F2F).copy(alpha = 0.15f))
+                                .border(
+                                    width = 1.dp,
+                                    color = Color(0xFFD32F2F).copy(alpha = 0.3f),
+                                    shape = RoundedCornerShape(8.dp)
+                                )
+                                .padding(12.dp)
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                Text(
+                                    text = "🚨",
+                                    fontSize = 20.sp
+                                )
+                                Text(
+                                    text = "$breachedCount LEAKED!",
+                                    fontSize = 14.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = Color(0xFFD32F2F)
+                                )
+                            }
+                        }
+                        Spacer(modifier = Modifier.height(12.dp))
+                    }
+
+                    // Score and Issues
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        // LEFT: Circular Score Indicator (like Security Score)
+                        Box(
+                            contentAlignment = Alignment.Center,
+                            modifier = Modifier.size(100.dp)
+                        ) {
+                            CircularProgressIndicator(
+                                progress = health.overallScore / 100f,
+                                modifier = Modifier.size(100.dp),
+                                strokeWidth = 10.dp,
+                                color = when {
+                                    health.overallScore >= 80 -> Color(0xFF388E3C)
+                                    health.overallScore >= 60 -> Color(0xFFFBC02D)
+                                    else -> Color(0xFFD32F2F)
+                                },
+                                trackColor = colors.textSecondary.copy(alpha = 0.1f)
+                            )
+
+                            Column(
+                                horizontalAlignment = Alignment.CenterHorizontally
+                            ) {
+                                Text(
+                                    text = "${health.overallScore}",
+                                    fontSize = 28.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = when {
+                                        health.overallScore >= 80 -> Color(0xFF388E3C)
+                                        health.overallScore >= 60 -> Color(0xFFFBC02D)
+                                        else -> Color(0xFFD32F2F)
+                                    }
+                                )
+                                Text(
+                                    text = "/ 100",
+                                    fontSize = 12.sp,
+                                    color = colors.textSecondary
+                                )
+
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.width(16.dp))
+
+                        // RIGHT: Issues Summary
+                        Column(modifier = Modifier.weight(1f)) {
+                            // Issues list
+                            if (health.weakPasswords > 0 || health.duplicatePasswords > 0 || breachedCount > 0) {
+                                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                    if (breachedCount > 0) {
+                                        Text(
+                                            text = "🚨 $breachedCount breached",
+                                            fontSize = 13.sp,
+                                            color = Color(0xFFD32F2F),
+                                            fontWeight = FontWeight.SemiBold
+                                        )
+                                    }
+                                    if (health.weakPasswords > 0) {
+                                        Text(
+                                            text = "⚠️ ${health.weakPasswords} weak",
+                                            fontSize = 13.sp,
+                                            color = colors.textSecondary
+                                        )
+                                    }
+                                    if (health.duplicatePasswords > 0) {
+                                        Text(
+                                            text = "❌ ${health.duplicatePasswords} duplicates",
+                                            fontSize = 13.sp,
+                                            color = colors.textSecondary
+                                        )
+                                    }
+                                }
+                            } else {
+                                Text(
+                                    text = "✅ All passwords secure!",
+                                    fontSize = 14.sp,
+                                    color = Color(0xFF388E3C),
+                                    fontWeight = FontWeight.SemiBold
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
+        }
+
+        // Quick Access Grid
+        Text(
+            text = "Quick Access",
+            fontSize = 20.sp,
+            fontWeight = FontWeight.Bold,
+            color = colors.textPrimary,
+            modifier = Modifier.padding(vertical = 8.dp)
+        )
+
+        Column(
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            // Password Manager Quick Access Card is positioned above the grid below
+
+            // AI Predictor Card - FEATURED! Full width at top
+            FeaturedAIPredictorDashboardCard(
+                onClick = { viewModel.navigateToScreen(SafeSphereScreen.AI_PREDICTOR) }
+            )
+
+            // Screenshot Guardian Card - NEW FEATURE! Full width
+            FeaturedScreenshotGuardianCard(
+                onClick = { viewModel.navigateToScreen(SafeSphereScreen.SCREENSHOT_GUARDIAN) }
+            )
+
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                DashboardCard(
+                    title = "Privacy Vault",
+                    icon = "🔐",
+                    description = "${stats.totalItems} items",
+                    color = colors.primary,
+                    onClick = { viewModel.navigateToScreen(SafeSphereScreen.PRIVACY_VAULT) },
+                    modifier = Modifier.weight(1f)
+                )
+
+                DashboardCard(
+                    title = "AI Chat",
+                    icon = "💬",
+                    description = "Offline advisor",
+                    color = colors.secondary,
+                    onClick = { viewModel.navigateToScreen(SafeSphereScreen.AI_CHAT) },
+                    modifier = Modifier.weight(1f)
+                )
+            }
+
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                DashboardCard(
+                    title = "Data Map",
+                    icon = "📊",
+                    description = "Visualize storage",
+                    color = colors.accent,
+                    onClick = { viewModel.navigateToScreen(SafeSphereScreen.DATA_MAP) },
+                    modifier = Modifier.weight(1f)
+                )
+
+                DashboardCard(
+                    title = "Threats",
+                    icon = "🛡️",
+                    description = "Simulation zone",
+                    color = colors.warning,
+                    onClick = { viewModel.navigateToScreen(SafeSphereScreen.THREAT_SIMULATION) },
+                    modifier = Modifier.weight(1f)
+                )
+            }
+
+            DashboardCard(
+                title = "Manage AI Models",
+                icon = "🧠",
+                description = "Download offline AI",
+                color = colors.info,
+                onClick = { viewModel.navigateToScreen(SafeSphereScreen.MODELS) },
+                modifier = Modifier.fillMaxWidth()
+            )
+        }
+    }
+}
+
+/**
+ * Password Manager Quick Access Card
+ */
+@Composable
+fun PasswordManagerQuickAccessCard(
+    passwordCount: Int,
+    isAutofillEnabled: Boolean,
+    onViewAllClick: () -> Unit,
+    onEnableAutofillClick: () -> Unit,
+    onAddPasswordClick: () -> Unit
+) {
+    GlassCard(
+        modifier = Modifier
+            .fillMaxWidth()
+            .heightIn(min = 110.dp)
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(20.dp),
+            horizontalAlignment = Alignment.Start,
+            verticalArrangement = Arrangement.Center
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        text = "🗝️",
+                        fontSize = 32.sp,
+                        modifier = Modifier.padding(end = 8.dp)
+                    )
+                    Text(
+                        text = "Password Manager",
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 18.sp,
+                        color = SafeSphereColors.TextPrimary
+                    )
+                }
+
+                // View All button with proper sizing
+                GlassButton(
+                    text = "View All",
+                    onClick = onViewAllClick,
+                    modifier = Modifier.wrapContentWidth(),
+                    primary = true
+                )
+            }
+
+            Spacer(modifier = Modifier.height(10.dp))
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    text = "$passwordCount Saved Password${if (passwordCount == 1) "" else "s"}",
+                    fontSize = 15.sp,
+                    color = SafeSphereColors.TextSecondary
+                )
+
+                Spacer(Modifier.width(22.dp))
+
+                // Autofill Status
+                Box(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(10.dp))
+                        .background(
+                            if (isAutofillEnabled) Color(0xFF4CAF50).copy(alpha = 0.25f)
+                            else Color(0xFFFF9800).copy(alpha = 0.25f)
+                        )
+                        .border(
+                            width = 1.5.dp,
+                            color = if (isAutofillEnabled) Color(0xFF4CAF50) else Color(0xFFFF9800),
+                            shape = RoundedCornerShape(10.dp)
+                        )
+                        .padding(horizontal = 12.dp, vertical = 6.dp)
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            text = if (isAutofillEnabled) "✅ Autofill: ON" else "⚠️ Autofill: OFF",
+                            fontWeight = FontWeight.Bold,
+                            color = if (isAutofillEnabled) Color(0xFF2E7D32) else Color(0xFFE65100),
+                            fontSize = 14.sp,
+                        )
+                        if (!isAutofillEnabled) {
+                            // Add enable autofill quick action
+                            TextButton(
+                                onClick = onEnableAutofillClick,
+                                contentPadding = PaddingValues(0.dp)
+                            ) {
+                                Text(
+                                    text = "Enable",
+                                    color = SafeSphereColors.Primary,
+                                    fontSize = 14.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    modifier = Modifier.padding(start = 4.dp)
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(10.dp))
+
+            // Add Password button with proper sizing
+            GlassButton(
+                text = "Add Password",
+                onClick = onAddPasswordClick,
+                modifier = Modifier.wrapContentWidth(),
+                primary = false
+            )
+        }
+    }
+}
+
+@Composable
+fun DashboardCard(
+    title: String,
+    icon: String,
+    description: String,
+    color: Color,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val colors = SafeSphereThemeColors
+
+    GlassCard(
+        modifier = modifier
+            .height(120.dp)
+            .clickable(onClick = onClick)
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(16.dp),
+            verticalArrangement = Arrangement.SpaceBetween
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.Top
+            ) {
+                Text(
+                    text = icon,
+                    fontSize = 32.sp
+                )
+
+                Box(
+                    modifier = Modifier
+                        .size(8.dp)
+                        .clip(CircleShape)
+                        .background(color)
+                )
+            }
+
+            Column {
+                Text(
+                    text = title,
+                    fontSize = 16.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = colors.textPrimary
+                )
+
+                Text(
+                    text = description,
+                    fontSize = 12.sp,
+                    color = colors.textSecondary
+                )
+            }
+        }
+    }
+}
+
+/**
+ * Featured AI Predictor Card - more prominent at top of Quick Access
+ */
+@Composable
+fun FeaturedAIPredictorDashboardCard(onClick: () -> Unit) {
+    GlassCard(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(140.dp)
+            .border(
+                width = 2.dp,
+                color = Color(0xFF9C27B0),
+                shape = RoundedCornerShape(18.dp)
+            )
+            .clickable(onClick = onClick)
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(
+                    Brush.linearGradient(
+                        colors = listOf(
+                            Color(0xFF9C27B0).copy(alpha = 0.1f),
+                            Color(0xFF7B1FA2).copy(alpha = 0.05f),
+                            Color.Transparent
+                        )
+                    )
+                )
+                .padding(20.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxSize(),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                // Icon
+                Box(
+                    modifier = Modifier
+                        .size(64.dp)
+                        .clip(CircleShape)
+                        .background(Color(0xFF9C27B0).copy(alpha = 0.15f)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = "🤖",
+                        fontSize = 36.sp
+                    )
+                }
+
+                Spacer(modifier = Modifier.width(16.dp))
+
+                Column(
+                    modifier = Modifier.weight(1f),
+                    verticalArrangement = Arrangement.Center
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Text(
+                            text = "AI Security Predictor",
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 19.sp,
+                            color = Color(0xFF9C27B0)
+                        )
+
+                        // Featured badge
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(6.dp))
+                                .background(Color(0xFF9C27B0))
+                                .padding(horizontal = 8.dp, vertical = 2.dp)
+                        ) {
+                            Text(
+                                text = "NEW",
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.Black,
+                                color = Color.White,
+                                letterSpacing = 0.5.sp
+                            )
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(6.dp))
+
+                    Text(
+                        text = "Predict future security risks with ML",
+                        fontSize = 14.sp,
+                        color = SafeSphereColors.TextPrimary,
+                        fontWeight = FontWeight.Medium
+                    )
+
+                    Spacer(modifier = Modifier.height(4.dp))
+
+                    Text(
+                        text = "🔮 See risk 30 & 90 days ahead • 🎯 Breach probability",
+                        fontSize = 12.sp,
+                        color = SafeSphereColors.TextSecondary
+                    )
+                }
+            }
+        }
+    }
+}
+
+/**
+ * Featured Screenshot Guardian Card - more prominent in Quick Access
+ */
+@Composable
+fun FeaturedScreenshotGuardianCard(onClick: () -> Unit) {
+    GlassCard(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(120.dp)
+            .border(
+                width = 2.dp,
+                color = Color(0xFF448AFF),
+                shape = RoundedCornerShape(18.dp)
+            )
+            .clickable(onClick = onClick)
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(
+                    Brush.linearGradient(
+                        colors = listOf(
+                            Color(0xFF448AFF).copy(alpha = 0.08f),
+                            Color(0xFF1976D2).copy(alpha = 0.04f),
+                            Color.Transparent
+                        )
+                    )
+                )
+                .padding(20.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxSize(),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                // Icon
+                Box(
+                    modifier = Modifier
+                        .size(54.dp)
+                        .clip(CircleShape)
+                        .background(Color(0xFF1976D2).copy(alpha = 0.16f)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = "🖼️",
+                        fontSize = 28.sp
+                    )
+                }
+
+                Spacer(modifier = Modifier.width(16.dp))
+
+                Column(
+                    modifier = Modifier.weight(1f),
+                    verticalArrangement = Arrangement.Center
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(7.dp)
+                    ) {
+                        Text(
+                            text = "Screenshot Guardian",
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 17.sp,
+                            color = Color(0xFF1976D2)
+                        )
+
+                        // "FEATURE" badge
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(6.dp))
+                                .background(Color(0xFF1976D2))
+                                .padding(horizontal = 8.dp, vertical = 2.dp)
+                        ) {
+                            Text(
+                                text = "FEATURE",
+                                fontSize = 9.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Color.White,
+                                letterSpacing = 0.5.sp
+                            )
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(5.dp))
+
+                    Text(
+                        text = "Block unauthorized screenshots & protect your secrets",
+                        fontSize = 14.sp,
+                        color = SafeSphereColors.TextPrimary,
+                        fontWeight = FontWeight.Medium
+                    )
+
+                    Spacer(modifier = Modifier.height(2.dp))
+
+                    Text(
+                        text = "🫥 Guard vault & passwords • 🔒 Privacy always on",
+                        fontSize = 12.sp,
+                        color = SafeSphereColors.TextSecondary
+                    )
+                }
+            }
+        }
+    }
+}
+
+/**
+ * Privacy Vault Screen - Encrypted storage management
+ */
+@Composable
+fun PrivacyVaultScreen(viewModel: SafeSphereViewModel) {
+    val vaultItems by viewModel.vaultItems.collectAsState()
+    var showAddDialog by remember { mutableStateOf(false) }
+    var selectedItem by remember { mutableStateOf<PrivacyVaultItem?>(null) }
+
+    Box(modifier = Modifier.fillMaxSize()) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(top = 16.dp)
+        ) {
+            if (vaultItems.isEmpty()) {
+                // Empty state
+                Column(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(32.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.Center
+                ) {
+                    Text(
+                        text = "🔐",
+                        fontSize = 64.sp
+                    )
+
+                    Spacer(modifier = Modifier.height(16.dp))
+
+                    Text(
+                        text = "Your vault is empty",
+                        fontSize = 20.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = SafeSphereColors.TextPrimary
+                    )
+
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    Text(
+                        text = "Add sensitive data to store it encrypted",
+                        fontSize = 14.sp,
+                        color = SafeSphereColors.TextSecondary,
+                        textAlign = TextAlign.Center
+                    )
+
+                    Spacer(modifier = Modifier.height(24.dp))
+
+                    GlassButton(
+                        text = "Add First Item",
+                        onClick = { showAddDialog = true },
+                        primary = true
+                    )
+                }
+            } else {
+                // Vault items list
+                LazyColumn(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(horizontal = 16.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp),
+                    contentPadding = PaddingValues(
+                        top = 16.dp,
+                        bottom = 88.dp // Extra padding for FAB
+                    )
+                ) {
+                    items(vaultItems) { item ->
+                        VaultItemCard(
+                            item = item,
+                            onClick = { selectedItem = item }
+                        )
+                    }
+                }
+            }
+        }
+
+        // Floating Action Button - Always visible when items exist
+        if (vaultItems.isNotEmpty()) {
+            FloatingActionButton(
+                onClick = { showAddDialog = true },
+                modifier = Modifier
+                    .align(Alignment.BottomEnd)
+                    .padding(24.dp),
+                containerColor = SafeSphereColors.Primary,
+                contentColor = Color.White
+            ) {
+                Icon(
+                    imageVector = Icons.Filled.Add,
+                    contentDescription = "Add Item",
+                    modifier = Modifier.size(28.dp)
+                )
+            }
+        }
+
+        // Add/Edit Dialog
+        if (showAddDialog) {
+            AddVaultItemDialog(
+                onDismiss = { showAddDialog = false },
+                onSave = { title, content, category ->
+                    viewModel.addVaultItem(title, content, category)
+                    showAddDialog = false
+                }
+            )
+        }
+
+        // View Item Dialog - This has biometric authentication
+        selectedItem?.let { item ->
+            ViewVaultItemDialog(
+                item = item,
+                viewModel = viewModel,
+                onDismiss = { selectedItem = null }
+            )
+        }
+    }
+}
+
+@Composable
+fun VaultItemCard(
+    item: PrivacyVaultItem,
+    onClick: () -> Unit
+) {
+    GlassCard(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick)
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            // Category icon
+            Box(
+                modifier = Modifier
+                    .size(48.dp)
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(SafeSphereColors.Primary.copy(alpha = 0.2f)),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    text = item.category.icon,
+                    fontSize = 24.sp
+                )
+            }
+
+            Spacer(modifier = Modifier.width(16.dp))
+
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = item.title,
+                    fontSize = 16.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = SafeSphereColors.TextPrimary
+                )
+
+                Text(
+                    text = item.category.displayName,
+                    fontSize = 12.sp,
+                    color = SafeSphereColors.TextSecondary
+                )
+            }
+
+            if (item.isEncrypted) {
+                Text(
+                    text = "🔒",
+                    fontSize = 20.sp
+                )
+            }
+        }
+    }
+}
+
+// ... Continue in next part ...

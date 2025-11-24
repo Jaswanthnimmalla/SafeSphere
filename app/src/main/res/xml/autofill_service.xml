@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="utf-8"?>
+<autofill-service xmlns:android="http://schemas.android.com/apk/res/android"
+    android:settingsActivity="com.runanywhere.startup_hackathon20.SafeSphereMainActivity"
+    android:description="@string/autofill_service_description"
+    android:passwordsActivity="com.runanywhere.startup_hackathon20.SafeSphereMainActivity">
+
+    <!-- Compatibility mode - ensure autofill works in all browsers -->
+    <compatibility-packages>
+        <!-- Chrome and Chromium browsers -->
+        <package>com.android.chrome</package>
+        <package>com.chrome.beta</package>
+        <package>com.chrome.dev</package>
+        <package>com.chrome.canary</package>
+
+        <!-- Firefox browsers -->
+        <package>org.mozilla.firefox</package>
+        <package>org.mozilla.firefox_beta</package>
+        <package>org.mozilla.fenix</package>
+
+        <!-- Edge -->
+        <package>com.microsoft.emmx</package>
+
+        <!-- Opera -->
+        <package>com.opera.browser</package>
+        <package>com.opera.mini.native</package>
+
+        <!-- Brave -->
+        <package>com.brave.browser</package>
+
+        <!-- Samsung Internet -->
+        <package>com.sec.android.app.sbrowser</package>
+
+        <!-- DuckDuckGo -->
+        <package>com.duckduckgo.mobile.android</package>
+
+        <!-- UC Browser -->
+        <package>com.UCMobile.intl</package>
+
+        <!-- Other common apps -->
+        <package>com.google.android.gm</package> <!-- Gmail -->
+        <package>com.twitter.android</package>
+        <package>com.facebook.katana</package>
+        <package>com.instagram.android</package>
+    </compatibility-packages>
+</autofill-service>
