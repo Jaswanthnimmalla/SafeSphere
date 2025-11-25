@@ -251,7 +251,7 @@ class OfflineMessengerRepository private constructor(private val context: Contex
             content = message,
             timestamp = System.currentTimeMillis(),
             isSent = true,
-            isDelivered = false,
+            isDelivered = false, // Will be set to true only when Bluetooth delivers
             isRead = false,
             messageType = MessageType.TEXT,
             fileUri = null,
@@ -262,47 +262,64 @@ class OfflineMessengerRepository private constructor(private val context: Contex
 
         addMessageToConversation(phone, msg)
 
-        // Try to send via ALL active connections (broadcast)
+        // Try to send via Bluetooth if receiver is connected
         var messageSent = false
+        val receiverAddress = phoneToAddressMap[phone]
 
-        if (activeConnections.isEmpty()) {
-            // No connections yet, try to connect to paired devices
-            connectToAllPairedDevices()
-            delay(500) // Give it time to connect
-        }
-
-        // Send to all connected devices
-        activeConnections.forEach { (address, socket) ->
-            if (socket.isConnected) {
+        if (receiverAddress != null && activeConnections.containsKey(receiverAddress)) {
+            // Receiver is connected via Bluetooth
+            val socket = activeConnections[receiverAddress]
+            if (socket?.isConnected == true) {
                 try {
                     val outputStream = socket.outputStream
-                    // Send phone number + message so receiver knows who it's from
                     val payload = "$phone|$message"
                     outputStream.write(payload.toByteArray())
                     outputStream.flush()
 
-                    Log.d(TAG, "Message sent to $address via Bluetooth")
+                    Log.d(TAG, "✅ Message sent to $receiverAddress via Bluetooth")
                     messageSent = true
 
-                    // Map this connection to this phone
-                    phoneToAddressMap[phone] = address
-                    addressToPhoneMap[address] = phone
+                    // Mark as delivered immediately (double tick)
+                    delay(200)
+                    markAsDelivered(phone, msg.id)
                 } catch (e: IOException) {
-                    Log.e(TAG, "Failed to send message to $address: ${e.message}")
-                    activeConnections.remove(address)
+                    Log.e(TAG, "Failed to send message to $receiverAddress: ${e.message}")
+                    activeConnections.remove(receiverAddress)
+                    messageSent = false
+                }
+            }
+        } else {
+            // Receiver not connected - try to find and connect
+            Log.d(TAG, "⚠️ Receiver not connected, attempting to find device...")
+
+            // Try to connect to all paired devices
+            if (activeConnections.isEmpty()) {
+                connectToAllPairedDevices()
+                delay(1000) // Give time to establish connections
+            }
+
+            // Try again after connection attempt
+            if (receiverAddress != null && activeConnections.containsKey(receiverAddress)) {
+                val socket = activeConnections[receiverAddress]
+                if (socket?.isConnected == true) {
+                    try {
+                        val outputStream = socket.outputStream
+                        val payload = "$phone|$message"
+                        outputStream.write(payload.toByteArray())
+                        outputStream.flush()
+                        messageSent = true
+                        delay(200)
+                        markAsDelivered(phone, msg.id)
+                    } catch (e: IOException) {
+                        Log.e(TAG, "Failed to send: ${e.message}")
+                    }
                 }
             }
         }
 
-        // Mark as delivered after short delay (simulate instant delivery)
-        if (messageSent) {
-            delay(500)
-            markAsDelivered(phone, msg.id)
-        } else {
-            // Even if not sent via Bluetooth, mark as delivered for demo
-            // (works as local-only messenger)
-            delay(1000)
-            markAsDelivered(phone, msg.id)
+        if (!messageSent) {
+            // Message not delivered - stays at single tick
+            Log.d(TAG, "📤 Message saved locally (single tick) - receiver not connected")
         }
 
         return@withContext messageSent
@@ -364,14 +381,26 @@ class OfflineMessengerRepository private constructor(private val context: Contex
     private fun receiveMessage(deviceAddress: String, content: String) {
         Log.d(TAG, "Raw message received from $deviceAddress: $content")
 
-        // Parse phone|message format
-        val parts = content.split("|", limit = 2)
-        val phone = if (parts.size == 2) parts[0] else deviceAddress
-        val messageContent = if (parts.size == 2) parts[1] else content
+        // Parse phone|message or phone|READ_RECEIPT|messageId format
+        val parts = content.split("|", limit = 3)
+        val phone = if (parts.size >= 2) parts[0] else deviceAddress
 
         // Map this address to this phone
         addressToPhoneMap[deviceAddress] = phone
         phoneToAddressMap[phone] = deviceAddress
+
+        // Check if it's a read receipt
+        if (parts.size == 3 && parts[1] == "READ_RECEIPT") {
+            val messageId = parts[2]
+            Log.d(TAG, "📘 Received read receipt for message $messageId from $phone")
+
+            // Mark message as read (change tick color)
+            markMessageAsReadByReceiver(phone, messageId)
+            return
+        }
+
+        // Regular message
+        val messageContent = if (parts.size >= 2) parts[1] else content
 
         val msg = Message(
             id = UUID.randomUUID().toString(),
@@ -399,18 +428,58 @@ class OfflineMessengerRepository private constructor(private val context: Contex
     }
 
     /**
+     * Mark message as read by receiver (changes tick color)
+     */
+    private fun markMessageAsReadByReceiver(phone: String, messageId: String) {
+        val current = _conversations.value.toMutableMap()
+        val messages = current[phone]?.map {
+            if (it.id == messageId && it.isSent) {
+                it.copy(isRead = true) // Blue ticks!
+            } else {
+                it
+            }
+        } ?: return
+
+        current[phone] = messages
+        _conversations.value = current
+
+        // Save immediately
+        saveConversations()
+
+        Log.d(TAG, "💙 Message $messageId marked as read (blue ticks)")
+    }
+
+    /**
      * Load conversations from storage
      */
     private fun loadConversations() {
         try {
             val conversationsJson = prefs.getString("conversations", null)
+
+            Log.d(TAG, "==================== LOADING CONVERSATIONS ====================")
             if (conversationsJson != null) {
+                Log.d(TAG, "Found saved JSON (length: ${conversationsJson.length})")
+                Log.d(TAG, "JSON (first 500 chars): ${conversationsJson.take(500)}")
+
                 val conversations = parseConversationsFromJson(conversationsJson)
                 _conversations.value = conversations
+
                 Log.d(TAG, "Loaded ${conversations.size} conversations from storage")
+                conversations.forEach { (phone, messages) ->
+                    Log.d(TAG, "Phone: $phone - Messages: ${messages.size}")
+                    messages.forEach { msg ->
+                        Log.d(
+                            TAG,
+                            "  Loaded MSG - Content: '${msg.content}' Type: ${msg.messageType}"
+                        )
+                    }
+                }
+            } else {
+                Log.d(TAG, "No saved conversations found")
             }
+            Log.d(TAG, "===============================================================")
         } catch (e: Exception) {
-            Log.e(TAG, "Failed to load conversations: ${e.message}")
+            Log.e(TAG, "Failed to load conversations: ${e.message}", e)
         }
     }
 
@@ -420,11 +489,50 @@ class OfflineMessengerRepository private constructor(private val context: Contex
     private fun saveConversations() {
         try {
             val json = conversationsToJson(_conversations.value)
+
+            // DEBUG: Log the exact JSON being saved
+            Log.d(TAG, "==================== SAVING CONVERSATIONS ====================")
+            Log.d(TAG, "Total conversations: ${_conversations.value.size}")
+            _conversations.value.forEach { (phone, messages) ->
+                Log.d(TAG, "Phone: $phone - Messages: ${messages.size}")
+                messages.forEach { msg ->
+                    Log.d(TAG, "  MSG ID: ${msg.id}")
+                    Log.d(TAG, "  Content: '${msg.content}'")
+                    Log.d(TAG, "  Type: ${msg.messageType}")
+                }
+            }
+            Log.d(TAG, "JSON to save (first 500 chars): ${json.take(500)}")
+            Log.d(TAG, "=============================================================")
+
             prefs.edit().putString("conversations", json).apply()
-            Log.d(TAG, "Saved ${_conversations.value.size} conversations to storage")
+            Log.d(TAG, "✅ Saved ${_conversations.value.size} conversations to storage")
         } catch (e: Exception) {
             Log.e(TAG, "Failed to save conversations: ${e.message}")
         }
+    }
+
+    /**
+     * Escape string for JSON
+     */
+    private fun escapeJson(str: String): String {
+        return str
+            .replace("\\", "\\\\")  // Backslash first!
+            .replace("\"", "\\\"")  // Quotes
+            .replace("\n", "\\n")   // Newlines
+            .replace("\r", "\\r")   // Carriage return
+            .replace("\t", "\\t")   // Tabs
+    }
+
+    /**
+     * Unescape JSON string
+     */
+    private fun unescapeJson(str: String): String {
+        return str
+            .replace("\\\"", "\"")
+            .replace("\\n", "\n")
+            .replace("\\r", "\r")
+            .replace("\\t", "\t")
+            .replace("\\\\", "\\")  // Backslash last!
     }
 
     /**
@@ -442,17 +550,17 @@ class OfflineMessengerRepository private constructor(private val context: Contex
                 if (msgIndex > 0) sb.append(",")
                 sb.append("{")
                 sb.append("\"id\":\"${msg.id}\",")
-                sb.append("\"content\":\"${msg.content.replace("\"", "\\\"")}\",")
+                sb.append("\"content\":\"${escapeJson(msg.content)}\",")
                 sb.append("\"timestamp\":${msg.timestamp},")
                 sb.append("\"isSent\":${msg.isSent},")
                 sb.append("\"isDelivered\":${msg.isDelivered},")
                 sb.append("\"isRead\":${msg.isRead},")
                 sb.append("\"isEdited\":${msg.isEdited},")
                 sb.append("\"messageType\":\"${msg.messageType.name}\",")
-                sb.append("\"fileUri\":\"${msg.fileUri ?: ""}\",")
-                sb.append("\"fileName\":\"${msg.fileName ?: ""}\",")
+                sb.append("\"fileUri\":\"${escapeJson(msg.fileUri ?: "")}\",")
+                sb.append("\"fileName\":\"${escapeJson(msg.fileName ?: "")}\",")
                 sb.append("\"fileSize\":${msg.fileSize ?: 0},")
-                sb.append("\"mimeType\":\"${msg.mimeType ?: ""}\"")
+                sb.append("\"mimeType\":\"${escapeJson(msg.mimeType ?: "")}\"")
                 sb.append("}")
             }
 
@@ -470,61 +578,161 @@ class OfflineMessengerRepository private constructor(private val context: Contex
         val conversations = mutableMapOf<String, List<Message>>()
 
         try {
-            // Simple JSON parsing without external libraries
-            var current = json.trim()
-            if (!current.startsWith("{") || !current.endsWith("}")) return emptyMap()
+            Log.d(TAG, "📖 Starting to parse conversations JSON (length: ${json.length})")
 
-            current = current.substring(1, current.length - 1) // Remove outer {}
+            // Remove outer braces
+            var i = json.indexOf('{')
+            if (i == -1) return emptyMap()
+            i++ // Skip opening brace
 
-            // Split by phone numbers
-            val phonePattern = "\"([^\"]+)\":\\[([^\\]]+)\\]".toRegex()
-            phonePattern.findAll(json).forEach { match ->
-                val phone = match.groupValues[1]
-                val messagesJson = match.groupValues[2]
+            while (i < json.length) {
+                // Skip whitespace
+                while (i < json.length && json[i].isWhitespace()) i++
+
+                if (i >= json.length || json[i] == '}') break
+
+                // Read phone number (key)
+                if (json[i] != '"') break
+                i++ // Skip opening quote
+
+                val phoneBuilder = StringBuilder()
+                while (i < json.length && json[i] != '"') {
+                    phoneBuilder.append(json[i])
+                    i++
+                }
+                val phone = phoneBuilder.toString()
+                i++ // Skip closing quote
+
+                // Skip colon and whitespace
+                while (i < json.length && (json[i].isWhitespace() || json[i] == ':')) i++
+
+                // Expect opening bracket for messages array
+                if (i >= json.length || json[i] != '[') break
+                i++ // Skip opening bracket
 
                 val messages = mutableListOf<Message>()
 
-                // Parse each message
-                val msgPattern = "\\{([^}]+)\\}".toRegex()
-                msgPattern.findAll(messagesJson).forEach { msgMatch ->
-                    val msgData = msgMatch.groupValues[1]
+                // Parse messages array
+                while (i < json.length) {
+                    // Skip whitespace
+                    while (i < json.length && json[i].isWhitespace()) i++
 
-                    // Extract fields
-                    val id = extractField(msgData, "id")
-                    val content = extractField(msgData, "content").replace("\\\"", "\"")
-                    val timestamp = extractField(msgData, "timestamp").toLongOrNull() ?: 0L
-                    val isSent = extractField(msgData, "isSent").toBoolean()
-                    val isDelivered = extractField(msgData, "isDelivered").toBoolean()
-                    val isRead = extractField(msgData, "isRead").toBoolean()
-                    val isEdited = extractField(msgData, "isEdited").toBoolean()
-                    val messageType = MessageType.valueOf(extractField(msgData, "messageType"))
-                    val fileUri = extractField(msgData, "fileUri")
-                    val fileName = extractField(msgData, "fileName")
-                    val fileSize = extractField(msgData, "fileSize").toLongOrNull()
-                    val mimeType = extractField(msgData, "mimeType")
+                    if (i >= json.length || json[i] == ']') {
+                        i++ // Skip closing bracket
+                        break
+                    }
 
-                    messages.add(
-                        Message(
-                            id = id,
-                            content = content,
-                            timestamp = timestamp,
-                            isSent = isSent,
-                            isDelivered = isDelivered,
-                            isRead = isRead,
-                            isEdited = isEdited,
-                            messageType = messageType,
-                            fileUri = if (fileUri == "") null else fileUri,
-                            fileName = if (fileName == "") null else fileName,
-                            fileSize = fileSize,
-                            mimeType = if (mimeType == "") null else mimeType
+                    // Skip comma if present
+                    if (json[i] == ',') {
+                        i++
+                        continue
+                    }
+
+                    // Expect opening brace for message object
+                    if (json[i] != '{') break
+
+                    // Find the complete message object by counting braces
+                    val messageStart = i
+                    var braceCount = 0
+                    var inString = false
+                    var escaped = false
+
+                    while (i < json.length) {
+                        val c = json[i]
+
+                        if (escaped) {
+                            escaped = false
+                            i++
+                            continue
+                        }
+
+                        if (c == '\\') {
+                            escaped = true
+                            i++
+                            continue
+                        }
+
+                        if (c == '"') {
+                            inString = !inString
+                        } else if (!inString) {
+                            if (c == '{') braceCount++
+                            else if (c == '}') {
+                                braceCount--
+                                if (braceCount == 0) {
+                                    i++ // Include closing brace
+                                    break
+                                }
+                            }
+                        }
+
+                        i++
+                    }
+
+                    // Extract and parse this message
+                    val messageJson = json.substring(messageStart, i)
+
+                    try {
+                        val id = extractField(messageJson, "id")
+                        val content = extractField(messageJson, "content")
+                        val timestamp = extractField(messageJson, "timestamp").toLongOrNull() ?: 0L
+                        val isSent = extractField(messageJson, "isSent").toBoolean()
+                        val isDelivered = extractField(messageJson, "isDelivered").toBoolean()
+                        val isRead = extractField(messageJson, "isRead").toBoolean()
+                        val isEdited = extractField(messageJson, "isEdited").toBoolean()
+                        val messageTypeStr = extractField(messageJson, "messageType")
+                        val messageType = try {
+                            MessageType.valueOf(
+                                messageTypeStr.takeIf { it.isNotEmpty() } ?: "TEXT"
+                            )
+                        } catch (e: Exception) {
+                            MessageType.TEXT
+                        }
+                        val fileUri =
+                            extractField(messageJson, "fileUri").takeIf { it.isNotEmpty() }
+                        val fileName =
+                            extractField(messageJson, "fileName").takeIf { it.isNotEmpty() }
+                        val fileSize = extractField(messageJson, "fileSize").toLongOrNull()
+                        val mimeType =
+                            extractField(messageJson, "mimeType").takeIf { it.isNotEmpty() }
+
+                        Log.d(
+                            TAG,
+                            "📩 Parsed message - Phone: $phone, ID: $id, Content: '$content', Type: $messageType"
                         )
-                    )
+
+                        if (id.isNotEmpty()) {
+                            messages.add(
+                                Message(
+                                    id = id,
+                                    content = content,
+                                    timestamp = timestamp,
+                                    isSent = isSent,
+                                    isDelivered = isDelivered,
+                                    isRead = isRead,
+                                    isEdited = isEdited,
+                                    messageType = messageType,
+                                    fileUri = fileUri,
+                                    fileName = fileName,
+                                    fileSize = fileSize,
+                                    mimeType = mimeType
+                                )
+                            )
+                        }
+                    } catch (e: Exception) {
+                        Log.e(TAG, "Error parsing individual message: ${e.message}")
+                    }
                 }
 
                 conversations[phone] = messages
+                Log.d(TAG, "✅ Loaded conversation for $phone: ${messages.size} messages")
+
+                // Skip comma between phone entries
+                while (i < json.length && (json[i].isWhitespace() || json[i] == ',')) i++
             }
+
+            Log.d(TAG, "✅ Parsed ${conversations.size} conversations total")
         } catch (e: Exception) {
-            Log.e(TAG, "Failed to parse conversations: ${e.message}")
+            Log.e(TAG, "Failed to parse conversations: ${e.message}", e)
         }
 
         return conversations
@@ -532,11 +740,79 @@ class OfflineMessengerRepository private constructor(private val context: Contex
 
     /**
      * Extract field value from JSON string
+     * Properly handles quoted strings with escaped characters
      */
     private fun extractField(json: String, field: String): String {
-        val pattern = "\"$field\":\"?([^,\"]+)\"?".toRegex()
-        val match = pattern.find(json)
-        return match?.groupValues?.get(1)?.trim() ?: ""
+        try {
+            // Find the field key
+            val fieldKey = "\"$field\":"
+            val startIndex = json.indexOf(fieldKey)
+            if (startIndex == -1) return ""
+
+            // Find where the value starts (after the colon and optional spaces)
+            var valueStart = startIndex + fieldKey.length
+            while (valueStart < json.length && json[valueStart].isWhitespace()) {
+                valueStart++
+            }
+
+            // Check if it's a quoted string
+            if (valueStart >= json.length) return ""
+
+            return if (json[valueStart] == '"') {
+                // It's a quoted string - find the closing quote (not escaped)
+                valueStart++ // Skip opening quote
+                val sb = StringBuilder()
+                var i = valueStart
+
+                while (i < json.length) {
+                    val char = json[i]
+
+                    when {
+                        char == '\\' && i + 1 < json.length -> {
+                            // Escaped character
+                            val nextChar = json[i + 1]
+                            when (nextChar) {
+                                'n' -> sb.append('\n')
+                                'r' -> sb.append('\r')
+                                't' -> sb.append('\t')
+                                '"' -> sb.append('"')
+                                '\\' -> sb.append('\\')
+                                else -> {
+                                    sb.append('\\')
+                                    sb.append(nextChar)
+                                }
+                            }
+                            i += 2
+                        }
+
+                        char == '"' -> {
+                            // Closing quote found
+                            return sb.toString()
+                        }
+
+                        else -> {
+                            sb.append(char)
+                            i++
+                        }
+                    }
+                }
+
+                // If we got here, no closing quote found - return what we have
+                sb.toString()
+            } else {
+                // Not a quoted value (number, boolean, etc.)
+                val sb = StringBuilder()
+                var i = valueStart
+                while (i < json.length && json[i] != ',' && json[i] != '}' && json[i] != ']') {
+                    sb.append(json[i])
+                    i++
+                }
+                sb.toString().trim()
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error extracting field '$field': ${e.message}")
+            return ""
+        }
     }
 
     /**
@@ -553,7 +829,10 @@ class OfflineMessengerRepository private constructor(private val context: Contex
         // Save immediately
         saveConversations()
 
-        Log.d(TAG, "Added message to $phone. Total: ${messages.size}")
+        Log.d(
+            TAG,
+            "✅ Added message to $phone. Content: '${message.content}' Type: ${message.messageType} Total: ${messages.size}"
+        )
     }
 
     /**
@@ -573,11 +852,17 @@ class OfflineMessengerRepository private constructor(private val context: Contex
     }
 
     /**
-     * Mark messages as read
+     * Mark messages as read and send read receipt
      */
     fun markAsRead(phone: String) {
         val current = _conversations.value.toMutableMap()
         val messages = current[phone]?.map {
+            if (!it.isSent && !it.isRead) {
+                // Send read receipt back to sender
+                scope.launch {
+                    sendReadReceipt(phone, it.id)
+                }
+            }
             it.copy(isRead = true)
         } ?: return
 
@@ -586,6 +871,30 @@ class OfflineMessengerRepository private constructor(private val context: Contex
 
         // Save immediately
         saveConversations()
+    }
+
+    /**
+     * Send read receipt to sender
+     */
+    private suspend fun sendReadReceipt(phone: String, messageId: String) {
+        withContext(Dispatchers.IO) {
+            val receiverAddress = phoneToAddressMap[phone]
+            if (receiverAddress != null && activeConnections.containsKey(receiverAddress)) {
+                val socket = activeConnections[receiverAddress]
+                if (socket?.isConnected == true) {
+                    try {
+                        val outputStream = socket.outputStream
+                        // Send read receipt in format: phone|READ_RECEIPT|messageId
+                        val payload = "$phone|READ_RECEIPT|$messageId"
+                        outputStream.write(payload.toByteArray())
+                        outputStream.flush()
+                        Log.d(TAG, "✅ Sent read receipt for message $messageId")
+                    } catch (e: IOException) {
+                        Log.e(TAG, "Failed to send read receipt: ${e.message}")
+                    }
+                }
+            }
+        }
     }
 
     /**

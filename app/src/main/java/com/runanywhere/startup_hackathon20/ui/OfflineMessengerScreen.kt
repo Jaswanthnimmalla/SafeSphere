@@ -1,5 +1,4 @@
 package com.runanywhere.startup_hackathon20.ui
-
 import android.Manifest
 import android.content.Context
 import android.content.Intent
@@ -13,6 +12,8 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.*
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.*
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -895,6 +896,9 @@ private fun ChatDialog(
 ) {
     var messageText by remember { mutableStateOf("") }
     var showAttachmentOptions by remember { mutableStateOf(false) }
+    var selectedMessageId by remember { mutableStateOf<String?>(null) }
+    var showEditDialog by remember { mutableStateOf(false) }
+    var editingMessageText by remember { mutableStateOf("") }
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
 
@@ -1032,7 +1036,83 @@ private fun ChatDialog(
                     reverseLayout = true
                 ) {
                     items(messages.asReversed()) { message ->
-                        MessageBubble(message, colors)
+                        Box(
+                            modifier = Modifier
+                                .combinedClickable(
+                                    onClick = {},
+                                    onLongClick = {
+                                        if (message.isSent) { // Only own messages
+                                            selectedMessageId = message.id
+                                        }
+                                    }
+                                )
+                        ) {
+                            MessageBubble(
+                                message = message,
+                                colors = colors,
+                                isSelected = selectedMessageId == message.id
+                            )
+                            if (selectedMessageId == message.id && message.isSent) {
+                                // Actions popup
+                                Box(
+                                    Modifier
+                                        .fillMaxSize()
+                                        .background(Color.Black.copy(alpha = 0.18f))
+                                        .clickable(
+                                            indication = null,
+                                            interactionSource = remember { MutableInteractionSource() }
+                                        ) { selectedMessageId = null }
+                                )
+                                Row(
+                                    Modifier
+                                        .align(Alignment.TopEnd)
+                                        .padding(4.dp)
+                                ) {
+                                    IconButton(
+                                        onClick = {
+                                            // Edit
+                                            selectedMessageId = message.id
+                                            editingMessageText = message.content
+                                            showEditDialog = true
+                                        },
+                                        modifier = Modifier
+                                            .background(
+                                                colors.surface,
+                                                shape = CircleShape
+                                            )
+                                            .size(40.dp)
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.Edit,
+                                            contentDescription = "Edit",
+                                            tint = colors.textPrimary
+                                        )
+                                    }
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    IconButton(
+                                        onClick = {
+                                            // Delete
+                                            scope.launch {
+                                                repository?.deleteMessage(contact.phone, message.id)
+                                                selectedMessageId = null
+                                            }
+                                        },
+                                        modifier = Modifier
+                                            .background(
+                                                Color.Red.copy(alpha = 0.07f),
+                                                shape = CircleShape
+                                            )
+                                            .size(40.dp)
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.Delete,
+                                            contentDescription = "Delete",
+                                            tint = Color.Red
+                                        )
+                                    }
+                                }
+                            }
+                        }
                         Spacer(modifier = Modifier.height(8.dp))
                     }
 
@@ -1057,6 +1137,85 @@ private fun ChatDialog(
                                     color = Color(0xFF00BCD4),
                                     fontWeight = FontWeight.Medium
                                 )
+                            }
+                        }
+                    }
+                }
+
+                // Edit message dialog
+                if (showEditDialog && selectedMessageId != null) {
+                    androidx.compose.ui.window.Dialog(onDismissRequest = {
+                        showEditDialog = false
+                        selectedMessageId = null
+                    }) {
+                        GlassCard(
+                            modifier = Modifier
+                                .padding(16.dp)
+                                .fillMaxWidth()
+                        ) {
+                            Column(
+                                Modifier
+                                    .fillMaxWidth()
+                                    .padding(18.dp),
+                                horizontalAlignment = Alignment.CenterHorizontally
+                            ) {
+                                Text(
+                                    text = "Edit Message",
+                                    fontWeight = FontWeight.Bold,
+                                    color = colors.textPrimary,
+                                    fontSize = 18.sp
+                                )
+                                Spacer(modifier = Modifier.height(16.dp))
+                                BasicTextField(
+                                    value = editingMessageText,
+                                    onValueChange = { editingMessageText = it },
+                                    textStyle = TextStyle(
+                                        color = colors.textPrimary,
+                                        fontSize = 15.sp
+                                    ),
+                                    cursorBrush = SolidColor(Color(0xFF00BCD4)),
+                                    modifier = Modifier
+                                        .background(
+                                            colors.surfaceVariant,
+                                            shape = RoundedCornerShape(10.dp)
+                                        )
+                                        .padding(12.dp)
+                                        .fillMaxWidth()
+                                )
+                                Spacer(modifier = Modifier.height(18.dp))
+                                Row(
+                                    Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.End
+                                ) {
+                                    TextButton(
+                                        onClick = {
+                                            showEditDialog = false
+                                            selectedMessageId = null
+                                        }
+                                    ) {
+                                        Text("Cancel")
+                                    }
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Button(
+                                        onClick = {
+                                            scope.launch {
+                                                repository?.editMessage(
+                                                    contact.phone,
+                                                    selectedMessageId!!,
+                                                    editingMessageText
+                                                )
+                                                showEditDialog = false
+                                                selectedMessageId = null
+                                            }
+                                        },
+                                        enabled = editingMessageText.isNotBlank(),
+                                        colors = ButtonDefaults.buttonColors(
+                                            containerColor = Color(0xFF00BCD4)
+                                        )
+                                    ) {
+                                        Text("Save", color = Color.White)
+                                    }
+                                }
                             }
                         }
                     }
@@ -1167,10 +1326,14 @@ private fun ChatDialog(
                     FloatingActionButton(
                         onClick = {
                             if (messageText.isNotBlank()) {
+                                val textToSend = messageText // ← Capture text BEFORE clearing
+                                messageText = "" // ← Clear UI immediately
                                 scope.launch {
-                                    repository?.sendMessage(contact.phone, messageText)
+                                    repository?.sendMessage(
+                                        contact.phone,
+                                        textToSend
+                                    ) // ← Send captured text
                                 }
-                                messageText = ""
                             }
                         },
                         modifier = Modifier.size(48.dp),
@@ -1227,7 +1390,8 @@ private fun AttachmentButton(
 @Composable
 private fun MessageBubble(
     message: Message,
-    colors: ThemeColors
+    colors: ThemeColors,
+    isSelected: Boolean = false
 ) {
     val context = LocalContext.current
 
@@ -1247,11 +1411,21 @@ private fun MessageBubble(
                     )
                 )
                 .background(
-                    // WhatsApp-style colors: Green for sent, White for received
-                    if (message.isSent)
-                        Color(0xFF075E54) // WhatsApp green
-                    else
-                        Color.White
+                    when {
+                        isSelected -> Color.Yellow.copy(alpha = 0.2f)
+                        message.isSent -> Color(0xFF075E54)
+                        else -> Color.White
+                    }
+                )
+                .border(
+                    width = if (isSelected) 2.dp else 0.dp,
+                    color = if (isSelected) Color(0xFFFFC107) else Color.Transparent,
+                    shape = RoundedCornerShape(
+                        topStart = 16.dp,
+                        topEnd = 16.dp,
+                        bottomStart = if (message.isSent) 16.dp else 4.dp,
+                        bottomEnd = if (message.isSent) 4.dp else 16.dp
+                    )
                 )
                 .padding(12.dp)
         ) {
@@ -1467,19 +1641,23 @@ private fun MessageBubble(
 
                     if (message.isSent) {
                         Spacer(modifier = Modifier.width(4.dp))
-                        // ENHANCED CHECKMARKS - Much more visible
+                        // WhatsApp-style tick marks
+                        // ✓ = Sent (single gray tick)
+                        // ✓✓ = Delivered (double white ticks)  
+                        // ✓✓ = Read (double BLUE ticks)
                         Text(
                             text = when {
-                                message.isRead -> "✓✓"
-                                message.isDelivered -> "✓✓"
-                                else -> "✓"
+                                message.isRead -> "✓✓" // Read by receiver
+                                message.isDelivered -> "✓✓" // Delivered to receiver's device
+                                else -> "✓" // Just sent from your device
                             },
-                            fontSize = 16.sp, // Larger size
+                            fontSize = 16.sp,
                             fontWeight = FontWeight.Bold,
-                            color = if (message.isRead)
-                                Color(0xFF34B7F1) // Light blue for read
-                            else
-                                Color.White // White for sent/delivered
+                            color = when {
+                                message.isRead -> Color(0xFF34B7F1) // Blue ticks (read)
+                                message.isDelivered -> Color.White // White ticks (delivered)
+                                else -> Color.Gray.copy(alpha = 0.6f) // Gray tick (sent only)
+                            }
                         )
                     }
                 }
