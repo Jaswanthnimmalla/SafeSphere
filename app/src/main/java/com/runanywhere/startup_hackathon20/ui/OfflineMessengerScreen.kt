@@ -899,6 +899,7 @@ private fun ChatDialog(
     var selectedMessageId by remember { mutableStateOf<String?>(null) }
     var showEditDialog by remember { mutableStateOf(false) }
     var editingMessageText by remember { mutableStateOf("") }
+    var capturedImageUri by remember { mutableStateOf<Uri?>(null) }
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
 
@@ -950,6 +951,32 @@ private fun ChatDialog(
                     )
                 } catch (e: Exception) {
                     android.util.Log.e("ChatDialog", "Failed to send document: ${e.message}")
+                }
+            }
+        }
+    }
+
+    // Camera launcher for taking a picture and sending it
+    val cameraLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.TakePicture()
+    ) { success ->
+        if (success && capturedImageUri != null) {
+            scope.launch {
+                try {
+                    val fileName = "camera_${System.currentTimeMillis()}.jpg"
+                    val fileSize = getFileSize(context, capturedImageUri!!)
+
+                    repository?.sendMessageWithFile(
+                        phone = contact.phone,
+                        content = "",
+                        messageType = MessageType.IMAGE,
+                        fileUri = capturedImageUri.toString(),
+                        fileName = fileName,
+                        fileSize = fileSize,
+                        mimeType = "image/jpeg"
+                    )
+                } catch (e: Exception) {
+                    android.util.Log.e("ChatDialog", "Failed to send camera image: ${e.message}")
                 }
             }
         }
@@ -1234,9 +1261,9 @@ private fun ChatDialog(
                             .padding(16.dp),
                         horizontalArrangement = Arrangement.SpaceEvenly
                     ) {
-                        // Image button
+                        // Image button - Gallery picker
                         AttachmentButton(
-                            icon = Icons.Default.Favorite,
+                            icon = Icons.Filled.Image,
                             label = "Image",
                             color = Color(0xFFE91E63),
                             onClick = {
@@ -1245,9 +1272,9 @@ private fun ChatDialog(
                             }
                         )
 
-                        // Document button
+                        // Document button - File picker
                         AttachmentButton(
-                            icon = Icons.Default.Info,
+                            icon = Icons.Filled.InsertDriveFile,
                             label = "Document",
                             color = Color(0xFF2196F3),
                             onClick = {
@@ -1256,14 +1283,35 @@ private fun ChatDialog(
                             }
                         )
 
-                        // Camera button (future)
+                        // Camera button - Take photo
                         AttachmentButton(
-                            icon = Icons.Default.Face,
+                            icon = Icons.Filled.CameraAlt,
                             label = "Camera",
                             color = Color(0xFF4CAF50),
                             onClick = {
-                                // TODO: Implement camera
-                                showAttachmentOptions = false
+                                try {
+                                    // Create a temporary file for the camera image
+                                    val photoFile = java.io.File(
+                                        context.cacheDir,
+                                        "camera_${System.currentTimeMillis()}.jpg"
+                                    )
+                                    photoFile.createNewFile()
+
+                                    capturedImageUri =
+                                        androidx.core.content.FileProvider.getUriForFile(
+                                            context,
+                                            "${context.packageName}.fileprovider",
+                                            photoFile
+                                        )
+
+                                    cameraLauncher.launch(capturedImageUri!!)
+                                    showAttachmentOptions = false
+                                } catch (e: Exception) {
+                                    android.util.Log.e(
+                                        "ChatDialog",
+                                        "Failed to launch camera: ${e.message}"
+                                    )
+                                }
                             }
                         )
                     }

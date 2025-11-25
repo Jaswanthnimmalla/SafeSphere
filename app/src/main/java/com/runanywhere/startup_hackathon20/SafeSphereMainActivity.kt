@@ -12,6 +12,10 @@ import androidx.compose.animation.*
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.*
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.animation.*
+import androidx.compose.animation.core.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
@@ -929,8 +933,8 @@ fun BeautifulTopBar(
 }
 
 /**
- * Beautiful Bottom Navigation Bar with Home, Blog, and Settings Tabs
- * ENHANCED VISIBILITY VERSION - Bright background, larger icons, vibrant colors
+ * Beautiful Bottom Navigation Bar - MODERN SLEEK DESIGN
+ * Smaller icons, better proportions, attractive colors
  */
 @Composable
 fun BeautifulBottomNavigationBar(
@@ -949,6 +953,11 @@ fun BeautifulBottomNavigationBar(
             icon = Icons.Filled.Info
         ),
         BottomNavigationTab(
+            screen = SafeSphereScreen.ABOUT_US,
+            label = "About Us",
+            icon = Icons.Filled.Group // Team/Group icon for About Us
+        ),
+        BottomNavigationTab(
             screen = SafeSphereScreen.SETTINGS,
             label = "Settings",
             icon = Icons.Filled.Settings
@@ -958,10 +967,10 @@ fun BeautifulBottomNavigationBar(
     Surface(
         modifier = Modifier
             .fillMaxWidth()
-            .height(85.dp),
-        color = Color(0xFF1E293B), // Dark blue-gray background for high contrast
-        shadowElevation = 16.dp,
-        shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp)
+            .height(65.dp), // Reduced from 85dp
+        color = Color(0xFF1A1F2E), // Darker, more sophisticated background
+        shadowElevation = 12.dp,
+        shape = RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp) // Smaller radius
     ) {
         Box(
             modifier = Modifier
@@ -969,24 +978,44 @@ fun BeautifulBottomNavigationBar(
                 .background(
                     Brush.verticalGradient(
                         colors = listOf(
-                            Color(0xFF1E293B),
-                            Color(0xFF0F172A)
+                            Color(0xFF1A1F2E),
+                            Color(0xFF0F1419)
                         )
                     )
                 )
         ) {
+            // Subtle top border for depth
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(1.dp)
+                    .background(
+                        Brush.horizontalGradient(
+                            colors = listOf(
+                                Color.Transparent,
+                                Color(0xFF00BCD4).copy(alpha = 0.3f),
+                                Color(0xFFE91E63).copy(alpha = 0.3f),
+                                Color(0xFF9C27B0).copy(alpha = 0.3f),
+                                Color(0xFFFF9800).copy(alpha = 0.3f),
+                                Color.Transparent
+                            )
+                        )
+                    )
+            )
+
             Row(
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(horizontal = 20.dp, vertical = 12.dp),
+                    .padding(horizontal = 16.dp, vertical = 8.dp), // Adjusted for 4 items
                 horizontalArrangement = Arrangement.SpaceEvenly,
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 tabs.forEach { tab ->
-                    EnhancedBottomNavButton(
+                    ModernBottomNavButton(
                         icon = tab.icon,
                         label = tab.label,
                         isSelected = currentScreen == tab.screen,
+                        color = getTabColor(tab.screen),
                         onClick = { onNavigate(tab.screen) }
                     )
                 }
@@ -996,50 +1025,111 @@ fun BeautifulBottomNavigationBar(
 }
 
 /**
- * Enhanced Bottom Navigation Button - Larger icons, vibrant colors, improved contrast
+ * Get color for each tab
+ */
+fun getTabColor(screen: SafeSphereScreen): Color {
+    return when (screen) {
+        SafeSphereScreen.DASHBOARD -> Color(0xFF00BCD4) // Cyan
+        SafeSphereScreen.BLOGS -> Color(0xFFE91E63) // Pink
+        SafeSphereScreen.ABOUT_US -> Color(0xFF9C27B0) // Purple
+        SafeSphereScreen.SETTINGS -> Color(0xFFFF9800) // Orange
+        else -> Color(0xFF00BCD4)
+    }
+}
+
+/**
+ * Modern Bottom Navigation Button - Sleek and minimal
  */
 @Composable
-fun EnhancedBottomNavButton(
+fun ModernBottomNavButton(
     icon: androidx.compose.ui.graphics.vector.ImageVector,
     label: String,
     isSelected: Boolean,
+    color: Color,
     onClick: () -> Unit
 ) {
-    val activeColor = Color(0xFF38BDF8) // Vibrant blue accent
-    val inactiveIconColor = Color(0xFFCBD5E1) // Light gray-blue
-    val inactiveTextColor = Color(0xFF94A3B8)
-    val activeBg = activeColor.copy(alpha = 0.18f)
-    val buttonSize = 58.dp
-    val iconSize = 36.dp
+    val animatedScale by animateFloatAsState(
+        targetValue = if (isSelected) 1.0f else 0.95f,
+        animationSpec = spring(
+            dampingRatio = Spring.DampingRatioMediumBouncy,
+            stiffness = Spring.StiffnessLow
+        ), label = ""
+    )
+
+    val animatedAlpha by animateFloatAsState(
+        targetValue = if (isSelected) 1f else 0.6f,
+        animationSpec = tween(300), label = ""
+    )
 
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
-        modifier = Modifier.clickable(onClick = onClick)
+        modifier = Modifier
+            .scale(animatedScale)
+            .clickable(
+                onClick = onClick,
+                indication = null,
+                interactionSource = remember { MutableInteractionSource() }
+            )
+            .padding(4.dp)
     ) {
         Box(
             contentAlignment = Alignment.Center,
             modifier = Modifier
-                .size(buttonSize)
+                .size(44.dp) // Smaller icon container
                 .clip(CircleShape)
                 .background(
-                    if (isSelected) activeBg else Color.Transparent
+                    if (isSelected) {
+                        Brush.radialGradient(
+                            colors = listOf(
+                                color.copy(alpha = 0.25f),
+                                color.copy(alpha = 0.08f)
+                            )
+                        )
+                    } else {
+                        Brush.radialGradient(
+                            colors = listOf(
+                                Color.Transparent,
+                                Color.Transparent
+                            )
+                        )
+                    }
                 )
         ) {
             Icon(
                 imageVector = icon,
                 contentDescription = label,
-                tint = if (isSelected) activeColor else inactiveIconColor,
-                modifier = Modifier.size(iconSize)
+                tint = if (isSelected) color else Color(0xFF94A3B8),
+                modifier = Modifier
+                    .size(24.dp) // Smaller icon size
+                    .graphicsLayer(alpha = animatedAlpha)
             )
         }
+
         Spacer(modifier = Modifier.height(4.dp))
+
         Text(
             text = label,
-            fontSize = if (isSelected) 15.sp else 13.sp,
-            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
-            color = if (isSelected) activeColor else inactiveTextColor,
-            maxLines = 1
+            fontSize = 11.sp, // Slightly smaller text
+            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
+            color = if (isSelected) color else Color(0xFF64748B),
+            maxLines = 1,
+            modifier = Modifier.graphicsLayer(alpha = animatedAlpha)
         )
+
+        // Animated indicator dot
+        AnimatedVisibility(
+            visible = isSelected,
+            enter = scaleIn() + fadeIn(),
+            exit = scaleOut() + fadeOut()
+        ) {
+            Spacer(modifier = Modifier.height(2.dp))
+            Box(
+                modifier = Modifier
+                    .size(4.dp)
+                    .clip(CircleShape)
+                    .background(color)
+            )
+        }
     }
 }
 
