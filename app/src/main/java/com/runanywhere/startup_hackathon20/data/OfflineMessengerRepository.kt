@@ -9,12 +9,14 @@ import android.bluetooth.BluetoothServerSocket
 import android.bluetooth.BluetoothSocket
 import android.content.Context
 import android.content.pm.PackageManager
+import android.net.Uri
 import android.os.Build
 import android.util.Log
 import androidx.core.content.ContextCompat
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import java.io.File
 import java.io.IOException
 import java.io.InputStream
 import java.io.OutputStream
@@ -318,28 +320,42 @@ class OfflineMessengerRepository private constructor(private val context: Contex
         fileSize: Long,
         mimeType: String
     ): Boolean = withContext(Dispatchers.IO) {
-        // Save locally first
-        val msg = Message(
-            id = UUID.randomUUID().toString(),
-            content = content,
-            timestamp = System.currentTimeMillis(),
-            isSent = true,
-            isDelivered = false,
-            isRead = false,
-            messageType = messageType,
-            fileUri = fileUri,
-            fileName = fileName,
-            fileSize = fileSize,
-            mimeType = mimeType
-        )
+        try {
+            // Copy file to internal storage permanently
+            val permanentPath = copyFileToInternalStorage(fileUri, fileName)
 
-        addMessageToConversation(phone, msg)
+            if (permanentPath == null) {
+                Log.e(TAG, "Failed to copy file to internal storage")
+                return@withContext false
+            }
 
-        // Mark as delivered (file transfer not implemented over Bluetooth yet)
-        delay(1000)
-        markAsDelivered(phone, msg.id)
+            // Save locally with permanent file path
+            val msg = Message(
+                id = UUID.randomUUID().toString(),
+                content = content,
+                timestamp = System.currentTimeMillis(),
+                isSent = true,
+                isDelivered = false,
+                isRead = false,
+                messageType = messageType,
+                fileUri = permanentPath, // Use permanent file path instead of content URI
+                fileName = fileName,
+                fileSize = fileSize,
+                mimeType = mimeType
+            )
 
-        return@withContext true
+            addMessageToConversation(phone, msg)
+
+            // Mark as delivered (file transfer not implemented over Bluetooth yet)
+            delay(1000)
+            markAsDelivered(phone, msg.id)
+
+            Log.d(TAG, "Message with file sent successfully: ${msg.id}")
+            return@withContext true
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to send message with file: ${e.message}", e)
+            return@withContext false
+        }
     }
 
     /**
@@ -363,7 +379,12 @@ class OfflineMessengerRepository private constructor(private val context: Contex
             timestamp = System.currentTimeMillis(),
             isSent = false,
             isDelivered = true,
-            isRead = false
+            isRead = false,
+            messageType = MessageType.TEXT,
+            fileUri = null,
+            fileName = null,
+            fileSize = null,
+            mimeType = null
         )
 
         // Add to conversation immediately
@@ -426,6 +447,7 @@ class OfflineMessengerRepository private constructor(private val context: Contex
                 sb.append("\"isSent\":${msg.isSent},")
                 sb.append("\"isDelivered\":${msg.isDelivered},")
                 sb.append("\"isRead\":${msg.isRead},")
+                sb.append("\"isEdited\":${msg.isEdited},")
                 sb.append("\"messageType\":\"${msg.messageType.name}\",")
                 sb.append("\"fileUri\":\"${msg.fileUri ?: ""}\",")
                 sb.append("\"fileName\":\"${msg.fileName ?: ""}\",")
@@ -474,6 +496,7 @@ class OfflineMessengerRepository private constructor(private val context: Contex
                     val isSent = extractField(msgData, "isSent").toBoolean()
                     val isDelivered = extractField(msgData, "isDelivered").toBoolean()
                     val isRead = extractField(msgData, "isRead").toBoolean()
+                    val isEdited = extractField(msgData, "isEdited").toBoolean()
                     val messageType = MessageType.valueOf(extractField(msgData, "messageType"))
                     val fileUri = extractField(msgData, "fileUri")
                     val fileName = extractField(msgData, "fileName")
@@ -488,6 +511,7 @@ class OfflineMessengerRepository private constructor(private val context: Contex
                             isSent = isSent,
                             isDelivered = isDelivered,
                             isRead = isRead,
+                            isEdited = isEdited,
                             messageType = messageType,
                             fileUri = if (fileUri == "") null else fileUri,
                             fileName = if (fileName == "") null else fileName,
@@ -565,12 +589,106 @@ class OfflineMessengerRepository private constructor(private val context: Contex
     }
 
     /**
+     * Delete message
+     */
+    suspend fun deleteMessage(phone: String, messageId: String): Boolean =
+        withContext(Dispatchers.IO) {
+            try {
+                val currentMessages =
+                    _conversations.value[phone]?.toMutableList() ?: return@withContext false
+                val removed = currentMessages.removeIf { it.id == messageId }
+
+                if (removed) {
+                    _conversations.value = _conversations.value.toMutableMap().apply {
+                        put(phone, currentMessages)
+                    }
+                    saveConversations()
+                    Log.d(TAG, "Message deleted: $messageId")
+                    true
+                } else {
+                    false
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to delete message: ${e.message}", e)
+                false
+            }
+        }
+
+    /**
+     * Edit message
+     */
+    suspend fun editMessage(phone: String, messageId: String, newContent: String): Boolean =
+        withContext(Dispatchers.IO) {
+            try {
+                val currentMessages =
+                    _conversations.value[phone]?.toMutableList() ?: return@withContext false
+                val index = currentMessages.indexOfFirst { it.id == messageId }
+
+                if (index != -1) {
+                    val updatedMessage = currentMessages[index].copy(
+                        content = newContent,
+                        timestamp = System.currentTimeMillis(), // Update timestamp to show as edited
+                        isEdited = true
+                    )
+                    currentMessages[index] = updatedMessage
+
+                    _conversations.value = _conversations.value.toMutableMap().apply {
+                        put(phone, currentMessages)
+                    }
+                    saveConversations()
+                    Log.d(TAG, "Message edited: $messageId")
+                    true
+                } else {
+                    false
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to edit message: ${e.message}", e)
+                false
+            }
+        }
+
+    /**
      * Get paired Bluetooth devices
      */
     @SuppressLint("MissingPermission")
     fun getPairedDevices(): List<BluetoothDevice> {
         if (!isBluetoothAvailable()) return emptyList()
         return bluetoothAdapter?.bondedDevices?.toList() ?: emptyList()
+    }
+
+    /**
+     * Copy file from URI to internal storage permanently
+     */
+    private fun copyFileToInternalStorage(fileUri: String, fileName: String): String? {
+        return try {
+            val sourceUri = Uri.parse(fileUri)
+            val inputStream = context.contentResolver.openInputStream(sourceUri) ?: return null
+
+            // Create directory for messenger files
+            val messengerDir = File(context.filesDir, "messenger_files")
+            if (!messengerDir.exists()) {
+                messengerDir.mkdirs()
+            }
+
+            // Create unique filename to avoid conflicts
+            val timestamp = System.currentTimeMillis()
+            val extension = fileName.substringAfterLast(".", "")
+            val uniqueFileName = "${timestamp}_$fileName"
+            val destFile = File(messengerDir, uniqueFileName)
+
+            // Copy file
+            inputStream.use { input ->
+                destFile.outputStream().use { output ->
+                    input.copyTo(output)
+                }
+            }
+
+            Log.d(TAG, "File copied to: ${destFile.absolutePath}")
+            destFile.absolutePath
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to copy file: ${e.message}", e)
+            null
+        }
     }
 
     /**
@@ -613,6 +731,7 @@ data class Message(
     val isSent: Boolean,
     val isDelivered: Boolean,
     val isRead: Boolean,
+    val isEdited: Boolean = false,
     val messageType: MessageType = MessageType.TEXT,
     val fileUri: String? = null,
     val fileName: String? = null,

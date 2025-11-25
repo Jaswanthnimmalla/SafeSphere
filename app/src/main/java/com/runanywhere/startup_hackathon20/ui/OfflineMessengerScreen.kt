@@ -1247,10 +1247,11 @@ private fun MessageBubble(
                     )
                 )
                 .background(
+                    // WhatsApp-style colors: Green for sent, White for received
                     if (message.isSent)
-                        Color(0xFF00BCD4)
+                        Color(0xFF075E54) // WhatsApp green
                     else
-                        colors.surfaceVariant
+                        Color.White
                 )
                 .padding(12.dp)
         ) {
@@ -1260,8 +1261,16 @@ private fun MessageBubble(
                     MessageType.IMAGE -> {
                         // Image message
                         message.fileUri?.let { uri ->
+                            // Convert file path to File if it's an absolute path
+                            val imageModel = if (uri.startsWith("content://")) {
+                                Uri.parse(uri)
+                            } else {
+                                // It's a file path from internal storage
+                                java.io.File(uri)
+                            }
+
                             AsyncImage(
-                                model = Uri.parse(uri),
+                                model = imageModel,
                                 contentDescription = "Image",
                                 modifier = Modifier
                                     .heightIn(max = 200.dp)
@@ -1269,11 +1278,28 @@ private fun MessageBubble(
                                     .clip(RoundedCornerShape(8.dp))
                                     .clickable {
                                         // Open image in full screen
-                                        val intent = Intent(Intent.ACTION_VIEW).apply {
-                                            setDataAndType(Uri.parse(uri), "image/*")
-                                            flags = Intent.FLAG_GRANT_READ_URI_PERMISSION
+                                        try {
+                                            val viewUri = if (uri.startsWith("content://")) {
+                                                Uri.parse(uri)
+                                            } else {
+                                                // Use FileProvider for files from internal storage
+                                                androidx.core.content.FileProvider.getUriForFile(
+                                                    context,
+                                                    "${context.packageName}.fileprovider",
+                                                    java.io.File(uri)
+                                                )
+                                            }
+                                            val intent = Intent(Intent.ACTION_VIEW).apply {
+                                                setDataAndType(viewUri, "image/*")
+                                                flags = Intent.FLAG_GRANT_READ_URI_PERMISSION
+                                            }
+                                            context.startActivity(intent)
+                                        } catch (e: Exception) {
+                                            android.util.Log.e(
+                                                "MessageBubble",
+                                                "Failed to open image: ${e.message}"
+                                            )
                                         }
-                                        context.startActivity(intent)
                                     },
                                 contentScale = ContentScale.Crop
                             )
@@ -1282,9 +1308,16 @@ private fun MessageBubble(
                                 Text(
                                     text = message.content,
                                     fontSize = 14.sp,
-                                    color = if (message.isSent) Color.White else colors.textPrimary
+                                    color = if (message.isSent) Color.White else Color.Black
                                 )
                             }
+                        } ?: run {
+                            // Fallback if image URI is null
+                            Text(
+                                text = "📷 Image: ${message.fileName ?: "photo.jpg"}",
+                                fontSize = 14.sp,
+                                color = if (message.isSent) Color.White else Color.Black
+                            )
                         }
                     }
 
@@ -1295,19 +1328,26 @@ private fun MessageBubble(
                                 .fillMaxWidth()
                                 .clickable {
                                     message.fileUri?.let { uri ->
-                                        val intent = Intent(Intent.ACTION_VIEW).apply {
-                                            setDataAndType(
-                                                Uri.parse(uri),
-                                                message.mimeType ?: "*/*"
+                                        try {
+                                            val intent = Intent(Intent.ACTION_VIEW).apply {
+                                                setDataAndType(
+                                                    Uri.parse(uri),
+                                                    message.mimeType ?: "*/*"
+                                                )
+                                                flags = Intent.FLAG_GRANT_READ_URI_PERMISSION
+                                            }
+                                            context.startActivity(
+                                                Intent.createChooser(
+                                                    intent,
+                                                    "Open with"
+                                                )
                                             )
-                                            flags = Intent.FLAG_GRANT_READ_URI_PERMISSION
+                                        } catch (e: Exception) {
+                                            android.util.Log.e(
+                                                "MessageBubble",
+                                                "Failed to open document: ${e.message}"
+                                            )
                                         }
-                                        context.startActivity(
-                                            Intent.createChooser(
-                                                intent,
-                                                "Open with"
-                                            )
-                                        )
                                     }
                                 },
                             verticalAlignment = Alignment.CenterVertically
@@ -1339,7 +1379,7 @@ private fun MessageBubble(
                                     text = message.fileName ?: "Document",
                                     fontSize = 14.sp,
                                     fontWeight = FontWeight.Medium,
-                                    color = if (message.isSent) Color.White else colors.textPrimary,
+                                    color = if (message.isSent) Color.White else Color.Black,
                                     maxLines = 1,
                                     overflow = TextOverflow.Ellipsis
                                 )
@@ -1350,7 +1390,7 @@ private fun MessageBubble(
                                         color = if (message.isSent)
                                             Color.White.copy(alpha = 0.7f)
                                         else
-                                            colors.textSecondary
+                                            Color.Gray
                                     )
                                 }
                             }
@@ -1373,19 +1413,30 @@ private fun MessageBubble(
                             Text(
                                 text = if (message.messageType == MessageType.VOICE) "Voice message" else "Video message",
                                 fontSize = 14.sp,
-                                color = if (message.isSent) Color.White else colors.textPrimary
+                                color = if (message.isSent) Color.White else Color.Black
                             )
                         }
                     }
 
                     else -> {
                         // Text message
-                        Text(
-                            text = message.content,
-                            fontSize = 14.sp,
-                            color = if (message.isSent) Color.White else colors.textPrimary,
-                            lineHeight = 18.sp
-                        )
+                        if (message.content.isNotBlank()) {
+                            Text(
+                                text = message.content,
+                                fontSize = 15.sp,
+                                color = if (message.isSent) Color.White else Color.Black,
+                                lineHeight = 20.sp
+                            )
+                        } else {
+                            // Fallback for empty messages
+                            Text(
+                                text = "Message",
+                                fontSize = 15.sp,
+                                color = if (message.isSent) Color.White.copy(alpha = 0.7f) else Color.Gray,
+                                lineHeight = 20.sp,
+                                fontStyle = androidx.compose.ui.text.font.FontStyle.Italic
+                            )
+                        }
                     }
                 }
 
@@ -1395,27 +1446,40 @@ private fun MessageBubble(
                     horizontalArrangement = Arrangement.End,
                     modifier = Modifier.fillMaxWidth()
                 ) {
+                    // Show "edited" label if message was edited
+                    if (message.isEdited) {
+                        Text(
+                            text = "edited • ",
+                            fontSize = 10.sp,
+                            color = if (message.isSent) Color.White.copy(alpha = 0.6f) else Color.Gray,
+                            fontStyle = androidx.compose.ui.text.font.FontStyle.Italic
+                        )
+                    }
+
                     Text(
                         text = SimpleDateFormat(
                             "HH:mm",
                             Locale.getDefault()
                         ).format(Date(message.timestamp)),
-                        fontSize = 10.sp,
-                        color = if (message.isSent) Color.White.copy(alpha = 0.7f) else colors.textSecondary
+                        fontSize = 11.sp,
+                        color = if (message.isSent) Color.White.copy(alpha = 0.7f) else Color.Gray
                     )
 
                     if (message.isSent) {
                         Spacer(modifier = Modifier.width(4.dp))
+                        // ENHANCED CHECKMARKS - Much more visible
                         Text(
                             text = when {
                                 message.isRead -> "✓✓"
                                 message.isDelivered -> "✓✓"
                                 else -> "✓"
                             },
-                            fontSize = 14.sp,
+                            fontSize = 16.sp, // Larger size
                             fontWeight = FontWeight.Bold,
-                            color = if (message.isRead) Color(0xFF53BDEB)
-                            else Color.White.copy(alpha = 0.7f)
+                            color = if (message.isRead)
+                                Color(0xFF34B7F1) // Light blue for read
+                            else
+                                Color.White // White for sent/delivered
                         )
                     }
                 }
