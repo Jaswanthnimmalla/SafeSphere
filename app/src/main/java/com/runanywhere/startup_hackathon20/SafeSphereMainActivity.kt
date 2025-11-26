@@ -622,6 +622,11 @@ fun MainAppContent(
                                         onNavigateBack = { viewModel.navigateBack() }
                                     )
 
+                                    SafeSphereScreen.SAFESPHERE_SHARE -> SafeSphereShareScreen(
+                                        viewModel = viewModel,
+                                        onNavigateBack = { viewModel.navigateBack() }
+                                    )
+
                                     else -> {}
                                 }
                             }
@@ -1301,6 +1306,8 @@ fun getScreenTitle(screen: SafeSphereScreen): String {
         SafeSphereScreen.CONTACT_US -> "Contact"
         SafeSphereScreen.CAMERA_SCANNER -> "Image Scanner"
         SafeSphereScreen.OFFLINE_MESSENGER -> "Offline Messenger"
+        SafeSphereScreen.BACKUP_RESTORE -> "Backup & Restore"
+        SafeSphereScreen.SAFESPHERE_SHARE -> "SafeSphere Share"
         else -> "SafeSphere"
     }
 }

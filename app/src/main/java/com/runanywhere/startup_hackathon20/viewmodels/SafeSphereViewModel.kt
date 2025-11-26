@@ -936,7 +936,8 @@ enum class SafeSphereScreen {
     SCREENSHOT_GUARDIAN,
     CAMERA_SCANNER,  // New camera document scanner
     OFFLINE_MESSENGER,  // New offline messenger with local contacts
-    BACKUP_RESTORE  // New backup & restore feature
+    BACKUP_RESTORE,  // New backup & restore feature
+    SAFESPHERE_SHARE  // New high-speed file sharing (Wi-Fi Direct + Bluetooth)
 }
 
 /**

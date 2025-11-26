@@ -189,6 +189,16 @@ fun SafeSphereDrawerContent(
                     }
                 )
 
+                // SafeSphere Share
+                NavigationDrawerItem(
+                    iconEmoji = "📤",
+                    label = "SafeSphere Share",
+                    selected = currentScreen == SafeSphereScreen.SAFESPHERE_SHARE,
+                    onClick = {
+                        onNavigate(SafeSphereScreen.SAFESPHERE_SHARE)
+                    }
+                )
+
                 // Settings
                 NavigationDrawerItem(
                     icon = Icons.Filled.Settings,
